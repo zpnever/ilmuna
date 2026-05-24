@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@theme {
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: 'Amiri', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --color-ink-50: #f5f4ef;
+  --color-ink-100: #ebe8df;
+  --color-ink-200: #d8d3c6;
+  --color-ink-300: #b9b1a0;
+  --color-ink-400: #8a836f;
+  --color-ink-500: #5e594b;
+  --color-ink-600: #3b372f;
+  --color-ink-700: #25221c;
+  --color-ink-800: #171512;
+  --color-ink-900: #111111;
+  --color-gold-300: #dbc47d;
+  --color-gold-400: #c9a84c;
+  --color-gold-500: #a98b37;
+  --radius-card: 1.5rem;
+}
+
+:root {
+  color: #111111;
+  background:
+    radial-gradient(circle at top left, rgba(201, 168, 76, 0.15), transparent 30%),
+    linear-gradient(180deg, #ffffff, #f8f6f0 40%, #ffffff 100%);
+  font-family: var(--font-sans);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--color-ink-900);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+[dir='rtl'] {
+  font-family: var(--font-serif);
+}
+
+.pattern-grid {
+  background-image:
+    linear-gradient(rgba(17, 17, 17, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 17, 17, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.pattern-islamic {
+  background-image:
+    radial-gradient(circle at 0 0, transparent 15px, rgba(17, 17, 17, 0.05) 16px, transparent 17px),
+    radial-gradient(circle at 30px 30px, transparent 15px, rgba(17, 17, 17, 0.05) 16px, transparent 17px);
+  background-size: 60px 60px;
+}
