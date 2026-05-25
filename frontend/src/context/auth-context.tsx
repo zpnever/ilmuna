@@ -8,49 +8,56 @@ import {
 } from 'react'
 
 import {
-  getSessionUserSync,
+  getCurrentUser,
   loginWithEmail,
-  loginWithGoogleStub,
+  loginWithGoogleCredential,
   logout,
-  switchRole,
 } from '@/services/auth-service'
-import type { SessionUser, UserRole } from '@/types/domain'
+import type { SessionUser } from '@/types/domain'
 
 interface AuthContextValue {
   user: SessionUser | null
   isAuthenticated: boolean
-  login: typeof loginWithEmail
-  loginWithGoogle: typeof loginWithGoogleStub
+  isLoading: boolean
+  loginWithEmail: (email: string, password: string) => Promise<SessionUser>
+  loginWithGoogle: (credential: string) => Promise<SessionUser>
   logoutUser: () => Promise<void>
-  switchUserRole: (role: UserRole) => Promise<void>
-  refreshSession: () => void
+  refreshSession: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [user, setUser] = useState<SessionUser | null>(() => getSessionUserSync())
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    function handleStorage() {
-      setUser(getSessionUserSync())
+    async function boot() {
+      try {
+        const currentUser = await getCurrentUser()
+        setUser(currentUser)
+      } catch {
+        setUser(null)
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
+    void boot()
   }, [])
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isAuthenticated: Boolean(user),
-      async login(email, password) {
+      isLoading,
+      async loginWithEmail(email, password) {
         const nextUser = await loginWithEmail(email, password)
         setUser(nextUser)
         return nextUser
       },
-      async loginWithGoogle() {
-        const nextUser = await loginWithGoogleStub()
+      async loginWithGoogle(credential) {
+        const nextUser = await loginWithGoogleCredential(credential)
         setUser(nextUser)
         return nextUser
       },
@@ -58,15 +65,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await logout()
         setUser(null)
       },
-      async switchUserRole(role) {
-        const nextUser = await switchRole(role)
-        setUser(nextUser)
-      },
-      refreshSession() {
-        setUser(getSessionUserSync())
+      async refreshSession() {
+        try {
+          const nextUser = await getCurrentUser()
+          setUser(nextUser)
+        } catch {
+          setUser(null)
+        }
       },
     }),
-    [user],
+    [isLoading, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

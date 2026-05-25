@@ -12,6 +12,12 @@ export interface User {
   avatarUrl: string
   coverUrl: string
   interests: string[]
+  isPrivate: boolean
+  notificationPreferences: {
+    email: boolean
+    push: boolean
+    group: boolean
+  }
   emailVerified: boolean
   isVerified: boolean
   joinedAt: string
@@ -35,9 +41,9 @@ export interface FollowRelation {
   createdAt: string
 }
 
-export interface RichTextBlock {
-  type: 'richText'
-  html: string
+export interface MarkdownBlock {
+  type: 'markdown'
+  markdown: string
 }
 
 export interface QuranQuoteBlock {
@@ -55,7 +61,7 @@ export interface ImageBlock {
   images: string[]
 }
 
-export type PostContentBlock = RichTextBlock | QuranQuoteBlock | ImageBlock
+export type PostContentBlock = MarkdownBlock | QuranQuoteBlock | ImageBlock
 
 export interface Post {
   id: string
@@ -79,18 +85,36 @@ export interface CommentThread {
   createdAt: string
 }
 
+export type GroupRole = 'moderator' | 'admin' | 'ustadz' | 'anggota'
+export type GroupVisibility = 'public' | 'private'
+export type MembershipStatus = 'member' | 'non-member'
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected' | null
+
+export interface GroupJoinRequest {
+  id: string
+  groupId: string
+  userId: string
+  status: 'pending' | 'approved' | 'rejected'
+  requestedAt: string
+  reviewedAt: string | null
+  note: string
+  user: User
+}
+
 export interface GroupMaterial {
   id: string
   title: string
   description: string
-  type: 'pdf' | 'link' | 'text'
-  resourceUrl?: string
+  type: 'pdf' | 'link' | 'text' | string
+  resourceUrl?: string | null
   createdAt: string
 }
 
 export interface GroupDiscussionPost {
   id: string
   authorId: string
+  authorName?: string
+  authorUsername?: string
   content: string
   createdAt: string
 }
@@ -99,8 +123,9 @@ export interface GroupMember {
   id: string
   groupId: string
   userId: string
-  groupRole: 'ustadz' | 'moderator' | 'student'
+  groupRole: GroupRole
   joinedAt: string
+  user?: User
 }
 
 export interface Task {
@@ -108,7 +133,7 @@ export interface Task {
   groupId: string
   title: string
   description: string
-  type: 'hafalan' | 'catatan' | 'bacaan' | 'lainnya'
+  type: 'hafalan' | 'catatan' | 'bacaan' | 'lainnya' | string
   surahRef: string
   dueDate: string
   createdAt: string
@@ -129,11 +154,15 @@ export interface Group {
   name: string
   slug: string
   description: string
+  visibility: GroupVisibility
   isPublic: boolean
+  membershipStatus: MembershipStatus
+  joinRequestStatus: JoinRequestStatus
   inviteCode: string
   coverUrl: string
   tags: string[]
   createdAt: string
+  viewerRole?: GroupRole | null
   forumPosts: GroupDiscussionPost[]
   materials: GroupMaterial[]
   tasks: Task[]
@@ -186,6 +215,16 @@ export interface HadithEntry {
   translation: string
 }
 
+export interface HadithPage {
+  bookSlug: string
+  bookName: string
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
+  items: HadithEntry[]
+}
+
 export interface HadithBookmark {
   id: string
   userId: string
@@ -201,7 +240,7 @@ export interface HadithBookmark {
 export interface NotificationItem {
   id: string
   userId: string
-  actorId: string
+  actorId: string | null
   type:
     | 'follow'
     | 'post_like'
@@ -210,16 +249,12 @@ export interface NotificationItem {
     | 'new_task'
     | 'new_material'
     | 'task_review'
+    | 'join_request'
+    | 'post_report'
   message: string
   isRead: boolean
   createdAt: string
-}
-
-export interface ModerationItem {
-  postId: string
-  status: 'visible' | 'hidden'
-  reason: string
-  updatedAt: string
+  actorName?: string | null
 }
 
 export interface AdminStats {
@@ -231,16 +266,29 @@ export interface AdminStats {
   unreadNotificationsCount: number
 }
 
-export interface DemoDatabase {
-  users: User[]
-  follows: FollowRelation[]
-  posts: Post[]
-  comments: CommentThread[]
-  groups: Group[]
-  groupMembers: GroupMember[]
-  submissions: TaskSubmission[]
-  quranBookmarks: QuranBookmark[]
-  hadithBookmarks: HadithBookmark[]
-  notifications: NotificationItem[]
-  moderation: ModerationItem[]
+export interface AdminUser extends User {
+  isBanned: boolean
+  deletedAt: string | null
+}
+
+export interface AdminGroup extends Group {
+  membersCount: number
+}
+
+export interface AdminReportItem {
+  id: string
+  reason: string
+  status: 'pending' | 'taken_down' | 'dismissed'
+  moderatorNote: string
+  createdAt: string
+  reporter: User
+  post: Post & {
+    authorName: string
+    authorUsername: string
+    authorAvatar: string
+    commentCount: number
+    engagementScore: number
+    isHidden: boolean
+    reportCount: number
+  }
 }

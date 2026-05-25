@@ -1,49 +1,95 @@
-import { DEMO_CREDENTIALS } from '@/data/seed'
-import { delay } from '@/lib/utils'
-import { hydrateSessionUser, writeStoredSession } from '@/lib/storage'
+import {
+  apiRequest,
+  setAccessToken,
+} from '@/lib/api'
 import type { SessionUser, UserRole } from '@/types/domain'
 
-export async function loginWithEmail(email: string, password: string) {
-  if (email !== DEMO_CREDENTIALS.email || password !== DEMO_CREDENTIALS.password) {
-    throw new Error('Email atau password demo tidak cocok.')
-  }
-
-  writeStoredSession({
-    userId: 'user-demo',
-    activeRole: 'member',
-  })
-
-  return delay(hydrateSessionUser() as SessionUser, 350)
+interface AuthPayload {
+  user: SessionUser
+  accessToken: string
+  message?: string
 }
 
-export async function loginWithGoogleStub() {
-  writeStoredSession({
-    userId: 'user-demo',
-    activeRole: 'member',
-  })
+let sessionUser: SessionUser | null = null
+let ensureSessionPromise: Promise<SessionUser | null> | null = null
 
-  return delay(hydrateSessionUser() as SessionUser, 350)
+function withActiveRole(user: SessionUser): SessionUser {
+  return {
+    ...user,
+    activeRole: user.activeRole ?? user.role,
+  }
+}
+
+export async function loginWithEmail(email: string, password: string) {
+  const payload = await apiRequest<AuthPayload>(
+    '/auth/login',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    },
+    false,
+  )
+
+  const user = withActiveRole(payload.user)
+  setAccessToken(payload.accessToken)
+  sessionUser = user
+  return user
+}
+
+export async function loginWithGoogleCredential(credential: string) {
+  const payload = await apiRequest<AuthPayload>(
+    '/auth/google',
+    {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    },
+    false,
+  )
+
+  const user = withActiveRole(payload.user)
+  setAccessToken(payload.accessToken)
+  sessionUser = user
+  return user
 }
 
 export async function logout() {
-  writeStoredSession(null)
-  return delay(true, 100)
+  try {
+    await apiRequest<{ ok: boolean }>('/auth/logout', {
+      method: 'POST',
+    })
+  } finally {
+    setAccessToken(null)
+    sessionUser = null
+  }
 }
 
 export async function switchRole(role: UserRole) {
-  const session = hydrateSessionUser()
-  if (!session) {
-    throw new Error('Tidak ada sesi yang aktif.')
-  }
-
-  writeStoredSession({
-    userId: session.id,
-    activeRole: role,
-  })
-
-  return delay(hydrateSessionUser() as SessionUser, 100)
+  return role
 }
 
-export function getSessionUserSync() {
-  return hydrateSessionUser()
+export async function getCurrentUser() {
+  const payload = await apiRequest<{ user: SessionUser }>('/auth/me')
+  const user = withActiveRole(payload.user)
+  sessionUser = user
+  return user
+}
+
+export async function ensureSession() {
+  if (sessionUser) {
+    return sessionUser
+  }
+
+  if (!ensureSessionPromise) {
+    ensureSessionPromise = getCurrentUser()
+      .catch(() => null)
+      .finally(() => {
+        ensureSessionPromise = null
+      })
+  }
+
+  return ensureSessionPromise
+}
+
+export function getSessionUserSync(): SessionUser | null {
+  return sessionUser
 }

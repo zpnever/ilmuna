@@ -1,5 +1,6 @@
 import * as AvatarPrimitive from '@radix-ui/react-avatar'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { Slot } from '@radix-ui/react-slot'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
@@ -189,6 +190,45 @@ export function DialogContent({
 
 export const DialogTitle = DialogPrimitive.Title
 export const DialogDescription = DialogPrimitive.Description
+
+export function DropdownMenu(props: DropdownMenuPrimitive.DropdownMenuProps) {
+  return <DropdownMenuPrimitive.Root {...props} />
+}
+
+export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
+
+export function DropdownMenuContent({
+  className,
+  ...props
+}: DropdownMenuPrimitive.DropdownMenuContentProps) {
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        sideOffset={10}
+        className={cn(
+          'z-50 min-w-64 rounded-[1.75rem] border border-black/10 bg-white p-2 shadow-2xl outline-none',
+          className,
+        )}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  )
+}
+
+export function DropdownMenuItem({
+  className,
+  ...props
+}: DropdownMenuPrimitive.DropdownMenuItemProps) {
+  return (
+    <DropdownMenuPrimitive.Item
+      className={cn(
+        'flex cursor-pointer items-center rounded-2xl px-4 py-3 text-sm text-ink-700 outline-none transition hover:bg-black/5 focus:bg-black/5',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
 
 export function ScrollArea({
   className,

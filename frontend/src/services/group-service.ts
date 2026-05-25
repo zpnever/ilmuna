@@ -1,78 +1,148 @@
-import { delay } from '@/lib/utils'
-import { readDatabase, updateDatabase } from '@/lib/storage'
-import type { Group, TaskSubmission } from '@/types/domain'
+import { apiRequest } from '@/lib/api'
+import type {
+  Group,
+  GroupDiscussionPost,
+  GroupJoinRequest,
+  GroupMaterial,
+  GroupMember,
+  Task,
+  TaskSubmission,
+} from '@/types/domain'
+
+interface GroupDetailPayload {
+  group: Group
+  members: GroupMember[]
+  forumPosts: GroupDiscussionPost[]
+}
+
+interface GroupTaskDetailPayload {
+  group: Group
+  task: Task
+  submissions: TaskSubmission[]
+}
+
+interface CreateGroupInput {
+  name: string
+  slug: string
+  description: string
+  visibility: 'public' | 'private'
+  coverUrl: string
+  tags: string[]
+}
 
 export async function getGroups() {
-  const database = readDatabase()
-  return delay(database.groups, 240)
+  const groups = await apiRequest<Group[]>('/groups')
+  return groups.map((group) => ({
+    ...group,
+    forumPosts: group.forumPosts ?? [],
+    materials: group.materials ?? [],
+    tasks: group.tasks ?? [],
+  }))
 }
 
 export async function getGroupDetail(slug: string) {
-  const database = readDatabase()
-  const group = database.groups.find((entry) => entry.slug === slug)
-  if (!group) {
-    throw new Error('Grup tidak ditemukan.')
-  }
-
-  const members = database.groupMembers.filter((entry) => entry.groupId === group.id)
-
-  return delay(
-    {
-      group,
-      members,
+  const payload = await apiRequest<GroupDetailPayload>(`/groups/${slug}`)
+  return {
+    group: {
+      ...payload.group,
+      forumPosts: payload.forumPosts,
+      materials: [],
+      tasks: [],
     },
-    240,
-  )
+    members: payload.members,
+  }
+}
+
+export async function requestJoinGroup(slug: string) {
+  return apiRequest<{ status: string; membershipId?: string }>(`/groups/${slug}/join-requests`, {
+    method: 'POST',
+  })
+}
+
+export async function createGroup(input: CreateGroupInput) {
+  return apiRequest<Group>('/groups', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updateGroup(
+  slug: string,
+  input: Partial<CreateGroupInput>,
+) {
+  return apiRequest<Group>(`/groups/${slug}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function reviewJoinRequest(
+  slug: string,
+  requestId: string,
+  status: 'approved' | 'rejected',
+  note = '',
+) {
+  return apiRequest<{ status: string }>(`/groups/${slug}/join-requests/${requestId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ status, note }),
+  })
+}
+
+export async function getGroupJoinRequests(slug: string) {
+  return apiRequest<GroupJoinRequest[]>(`/groups/${slug}/join-requests`)
+}
+
+export async function updateGroupMemberRole(
+  slug: string,
+  memberId: string,
+  role: 'moderator' | 'admin' | 'ustadz' | 'anggota',
+) {
+  return apiRequest<GroupMember>(`/groups/${slug}/members/${memberId}/role`, {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  })
+}
+
+export async function leaveGroup(slug: string) {
+  return apiRequest<{ ok: true }>(`/groups/${slug}/leave`, {
+    method: 'POST',
+  })
+}
+
+export async function kickGroupMember(slug: string, memberId: string) {
+  return apiRequest<{ ok: true }>(`/groups/${slug}/members/${memberId}/kick`, {
+    method: 'POST',
+  })
+}
+
+export async function getGroupPosts(slug: string) {
+  return apiRequest<GroupDiscussionPost[]>(`/groups/${slug}/posts`)
+}
+
+export async function createGroupPost(slug: string, content: string) {
+  return apiRequest<GroupDiscussionPost>(`/groups/${slug}/posts`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
 }
 
 export async function getGroupMaterials(slug: string) {
-  const { group } = await getGroupDetail(slug)
-  return delay(group.materials, 140)
+  return apiRequest<GroupMaterial[]>(`/groups/${slug}/materials`)
 }
 
 export async function getGroupTasks(slug: string) {
-  const { group } = await getGroupDetail(slug)
-  return delay(group.tasks, 140)
+  return apiRequest<Task[]>(`/groups/${slug}/tasks`)
 }
 
 export async function getGroupTaskDetail(slug: string, taskId: string) {
-  const { group, members } = await getGroupDetail(slug)
-  const task = group.tasks.find((entry) => entry.id === taskId)
-  if (!task) {
-    throw new Error('Tugas tidak ditemukan.')
-  }
-
-  const database = readDatabase()
-  const submissions = database.submissions.filter((entry) => entry.taskId === task.id)
-
-  return delay(
-    {
-      group,
-      task,
-      members,
-      submissions,
-    },
-    140,
-  )
+  return apiRequest<GroupTaskDetailPayload>(`/groups/${slug}/tasks/${taskId}`)
 }
 
-export async function createSubmission(taskId: string, userId: string, content: string) {
-  const submission: TaskSubmission = {
-    id: crypto.randomUUID(),
-    taskId,
-    userId,
-    content,
-    status: 'pending',
-    note: '',
-    submittedAt: new Date().toISOString(),
-  }
-
-  updateDatabase((draft) => ({
-    ...draft,
-    submissions: [submission, ...draft.submissions.filter((entry) => !(entry.taskId === taskId && entry.userId === userId))],
-  }))
-
-  return delay(submission, 100)
+export async function createSubmission(taskId: string, _userId: string, content: string, slug: string) {
+  return apiRequest<TaskSubmission>(`/groups/${slug}/tasks/${taskId}/submissions`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  })
 }
 
 export async function reviewSubmission(
@@ -80,22 +150,13 @@ export async function reviewSubmission(
   status: 'accepted' | 'revision',
   note: string,
 ) {
-  updateDatabase((draft) => ({
-    ...draft,
-    submissions: draft.submissions.map((entry) =>
-      entry.id === submissionId
-        ? {
-            ...entry,
-            status,
-            note,
-          }
-        : entry,
-    ),
-  }))
-
-  return delay(true, 100)
+  return apiRequest<TaskSubmission>(`/groups/submissions/${submissionId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ status, note }),
+  })
 }
 
-export function getFeaturedGroup(): Group | null {
-  return readDatabase().groups[0] ?? null
+export async function getFeaturedGroup() {
+  const groups = await getGroups()
+  return groups[0] ?? null
 }

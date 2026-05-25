@@ -9,41 +9,50 @@ import {
 } from '@tanstack/react-router'
 
 import { AppFrame } from '@/components/layout'
-import { getSessionUserSync } from '@/services/auth-service'
+import { useAuth } from '@/context/auth-context'
+import { ensureSession } from '@/services/auth-service'
 
-function requireAuth() {
-  const session = getSessionUserSync()
+const publicPaths = ['/', '/login', '/register']
+
+async function requireAuth() {
+  const session = await ensureSession()
   if (!session) {
     throw redirect({ to: '/login' })
   }
   return session
 }
 
-function requireAdmin() {
-  const session = requireAuth()
+async function requireAdmin() {
+  const session = await requireAuth()
   if (session.activeRole !== 'admin') {
     throw redirect({ to: '/feed' })
   }
 }
 
+function RootShell() {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const { user, isLoading } = useAuth()
+  const isPublicRoute = publicPaths.includes(pathname)
+
+  if (!isPublicRoute && isLoading) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-ink-500">Memuat sesi...</div>
+  }
+
+  if (!isPublicRoute && user) {
+    return (
+      <AppFrame>
+        <Outlet />
+      </AppFrame>
+    )
+  }
+
+  return <Outlet />
+}
+
 const rootRoute = createRootRoute({
-  component: () => {
-    const pathname = useRouterState({
-      select: (state) => state.location.pathname,
-    })
-    const isPublicRoute = ['/', '/login', '/register', '/verify-email'].includes(pathname)
-    const session = getSessionUserSync()
-
-    if (!isPublicRoute && session) {
-      return (
-        <AppFrame>
-          <Outlet />
-        </AppFrame>
-      )
-    }
-
-    return <Outlet />
-  },
+  component: RootShell,
 })
 
 const landingRoute = createRoute({
@@ -62,12 +71,6 @@ const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
   component: lazyRouteComponent(() => import('@/screens/public-screens'), 'RegisterScreen'),
-})
-
-const verifyEmailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/verify-email',
-  component: lazyRouteComponent(() => import('@/screens/public-screens'), 'VerifyEmailScreen'),
 })
 
 const feedRoute = createRoute({
@@ -91,6 +94,13 @@ const notificationsRoute = createRoute({
   component: lazyRouteComponent(() => import('@/screens/social-screens'), 'NotificationsScreen'),
 })
 
+const postDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/posts/$postId',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/social-screens'), 'PostDetailScreen'),
+})
+
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/profile/$username',
@@ -98,11 +108,25 @@ const profileRoute = createRoute({
   component: lazyRouteComponent(() => import('@/screens/social-screens'), 'ProfileScreen'),
 })
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/settings-screen'), 'SettingsScreen'),
+})
+
 const groupsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/groups',
   beforeLoad: requireAuth,
   component: lazyRouteComponent(() => import('@/screens/group-screens'), 'GroupsScreen'),
+})
+
+const createGroupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/groups/create',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/group-screens'), 'CreateGroupScreen'),
 })
 
 const groupDetailRoute = createRoute({
@@ -126,11 +150,25 @@ const groupTasksRoute = createRoute({
   component: lazyRouteComponent(() => import('@/screens/group-screens'), 'GroupTasksScreen'),
 })
 
+const groupSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/groups/$slug/settings',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/group-screens'), 'GroupSettingsScreen'),
+})
+
 const groupTaskDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/groups/$slug/tasks/$taskId',
   beforeLoad: requireAuth,
   component: lazyRouteComponent(() => import('@/screens/group-screens'), 'GroupTaskDetailScreen'),
+})
+
+const referencesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/references',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/reference-screens'), 'ReferencesHubScreen'),
 })
 
 const quranRoute = createRoute({
@@ -178,50 +216,35 @@ const hadithBookmarksRoute = createRoute({
 const adminDashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
-  beforeLoad: () => {
-    requireAuth()
-    requireAdmin()
-  },
+  beforeLoad: requireAdmin,
   component: lazyRouteComponent(() => import('@/screens/admin-screens'), 'AdminDashboardScreen'),
 })
 
 const adminUsersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin/users',
-  beforeLoad: () => {
-    requireAuth()
-    requireAdmin()
-  },
+  beforeLoad: requireAdmin,
   component: lazyRouteComponent(() => import('@/screens/admin-screens'), 'AdminUsersScreen'),
 })
 
 const adminGroupsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin/groups',
-  beforeLoad: () => {
-    requireAuth()
-    requireAdmin()
-  },
+  beforeLoad: requireAdmin,
   component: lazyRouteComponent(() => import('@/screens/admin-screens'), 'AdminGroupsScreen'),
 })
 
 const adminModerationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin/moderation',
-  beforeLoad: () => {
-    requireAuth()
-    requireAdmin()
-  },
+  beforeLoad: requireAdmin,
   component: lazyRouteComponent(() => import('@/screens/admin-screens'), 'AdminModerationScreen'),
 })
 
 const adminStatsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin/stats',
-  beforeLoad: () => {
-    requireAuth()
-    requireAdmin()
-  },
+  beforeLoad: requireAdmin,
   component: lazyRouteComponent(() => import('@/screens/admin-screens'), 'AdminStatsScreen'),
 })
 
@@ -229,16 +252,20 @@ const routeTree = rootRoute.addChildren([
   landingRoute,
   loginRoute,
   registerRoute,
-  verifyEmailRoute,
   feedRoute,
   exploreRoute,
   notificationsRoute,
+  postDetailRoute,
   profileRoute,
+  settingsRoute,
   groupsRoute,
+  createGroupRoute,
   groupDetailRoute,
   groupMaterialsRoute,
   groupTasksRoute,
+  groupSettingsRoute,
   groupTaskDetailRoute,
+  referencesRoute,
   quranRoute,
   quranSurahRoute,
   quranBookmarksRoute,
