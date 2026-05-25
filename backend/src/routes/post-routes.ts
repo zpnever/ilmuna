@@ -192,6 +192,16 @@ postRouter.post('/posts/:postId/comments', requireAuth, async (req: Authenticate
       parentId: z.string().nullable().optional(),
     }).parse(req.body)
 
+    if (input.parentId) {
+      const parent = await prisma.postComment.findUnique({
+        where: { id: input.parentId },
+        select: { id: true, postId: true },
+      })
+      if (!parent || parent.postId !== postId) {
+        throw new HttpError(400, 'Komentar induk tidak valid.')
+      }
+    }
+
     const comment = await prisma.postComment.create({
       data: {
         postId,
@@ -268,6 +278,17 @@ postRouter.post('/posts/:postId/report', requireAuth, async (req: AuthenticatedR
     const input = z.object({
       reason: z.string().min(5),
     }).parse(req.body)
+
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true },
+    })
+    if (!post) {
+      throw new HttpError(404, 'Postingan tidak ditemukan.')
+    }
+    if (post.authorId === req.auth!.userId) {
+      throw new HttpError(400, 'Anda tidak dapat melaporkan postingan sendiri.')
+    }
 
     const existing = await prisma.postReport.findFirst({
       where: {

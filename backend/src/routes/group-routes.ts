@@ -1,21 +1,69 @@
 import crypto from 'node:crypto'
-import { GroupRole, GroupVisibility, JoinRequestStatus, SubmissionStatus } from '@prisma/client'
+import {
+  GroupRole,
+  GroupVisibility,
+  JoinRequestStatus,
+  ReactionType,
+  SubmissionStatus,
+} from '@prisma/client'
 import { Router } from 'express'
 import { z } from 'zod'
 
 import { HttpError } from '../lib/http-error.js'
 import { prisma } from '../lib/prisma.js'
-import { mapGroup, mapGroupMember, mapGroupPost, mapUser } from '../lib/serializers.js'
+import {
+  mapGroup,
+  mapGroupCommentWithAuthor,
+  mapGroupMaterial,
+  mapGroupMember,
+  mapGroupPostWithRelations,
+  mapUser,
+} from '../lib/serializers.js'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js'
 
 const groupRouter = Router()
+
+const markdownBlockSchema = z.object({
+  type: z.literal('markdown'),
+  markdown: z.string(),
+})
+
+const quranQuoteBlockSchema = z.object({
+  type: z.literal('quranQuote'),
+  surahNumber: z.number(),
+  ayahNumber: z.number(),
+  surahName: z.string(),
+  surahNameLatin: z.string(),
+  arabic: z.string(),
+  translation: z.string(),
+})
+
+const imageBlockSchema = z.object({
+  type: z.literal('images'),
+  images: z.array(z.string()),
+})
+
+const groupPostBlocksSchema = z
+  .array(z.union([markdownBlockSchema, quranQuoteBlockSchema, imageBlockSchema]))
+  .min(1)
+
 const groupInputSchema = z.object({
   name: z.string().min(3),
   slug: z.string().min(3).regex(/^[a-z0-9-]+$/),
   description: z.string().min(10),
   visibility: z.enum(['public', 'private']),
-  coverUrl: z.string().url().or(z.literal('')).default(''),
+  coverUrl: z.string().default(''),
   tags: z.array(z.string()).default([]),
+})
+
+const groupMaterialSchema = z.object({
+  title: z.string().min(3),
+  description: z.string().min(3),
+  type: z.string().min(2),
+  resourceUrl: z.string().url().optional().or(z.literal('')),
+  fileUrl: z.string().optional(),
+  fileName: z.string().optional(),
+  mimeType: z.string().optional(),
 })
 
 async function getMembership(groupId: string, userId: string) {
@@ -34,6 +82,19 @@ async function assertCanViewInternal(groupId: string, viewerId: string) {
     throw new HttpError(403, 'Anda harus menjadi anggota group private.')
   }
   return group
+}
+
+async function assertMember(groupId: string, userId: string) {
+  const membership = await prisma.groupMember.findFirst({
+    where: {
+      groupId,
+      userId,
+    },
+  })
+  if (!membership) {
+    throw new HttpError(403, 'Anda harus menjadi anggota grup.')
+  }
+  return membership
 }
 
 async function assertManager(groupId: string, userId: string) {
@@ -64,6 +125,35 @@ async function assertTaskManager(groupId: string, userId: string) {
   return membership
 }
 
+function mapGroupPayload(group: {
+  id: string
+  slug: string
+  name: string
+  description: string
+  visibility: GroupVisibility
+  inviteCode: string
+  coverUrl: string
+  tags: unknown
+  createdAt: Date
+  updatedAt: Date
+}, membershipStatus: 'member' | 'non-member', joinRequestStatus: string | null, viewerRole: string | null) {
+  return {
+    id: group.id,
+    name: group.name,
+    slug: group.slug,
+    description: group.description,
+    visibility: group.visibility.toLowerCase(),
+    isPublic: group.visibility === GroupVisibility.PUBLIC,
+    inviteCode: group.inviteCode,
+    coverUrl: group.coverUrl,
+    tags: (group.tags as string[]) ?? [],
+    createdAt: group.createdAt.toISOString(),
+    membershipStatus,
+    joinRequestStatus,
+    viewerRole,
+  }
+}
+
 groupRouter.get('/groups', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const groups = await prisma.group.findMany({ orderBy: { createdAt: 'desc' } })
@@ -74,11 +164,13 @@ groupRouter.get('/groups', requireAuth, async (req: AuthenticatedRequest, res, n
           where: { groupId: group.id, userId: req.auth!.userId },
           orderBy: { requestedAt: 'desc' },
         })
-        return {
-          ...mapGroup(group),
-          membershipStatus: membership ? 'member' : 'non-member',
-          joinRequestStatus: joinRequest?.status.toLowerCase() ?? null,
-        }
+
+        return mapGroupPayload(
+          group,
+          membership ? 'member' : 'non-member',
+          joinRequest?.status.toLowerCase() ?? null,
+          membership?.groupRole.toLowerCase() ?? null,
+        )
       }),
     )
     res.json(result)
@@ -116,11 +208,7 @@ groupRouter.post('/groups', requireAuth, async (req: AuthenticatedRequest, res, 
       },
     })
 
-    res.status(201).json({
-      ...mapGroup(group),
-      membershipStatus: 'member',
-      joinRequestStatus: null,
-    })
+    res.status(201).json(mapGroupPayload(group, 'member', null, 'moderator'))
   } catch (error) {
     next(error)
   }
@@ -132,9 +220,16 @@ groupRouter.get('/groups/:slug', requireAuth, async (req: AuthenticatedRequest, 
     const group = await prisma.group.findUnique({
       where: { slug },
       include: {
-        members: { include: { user: true } },
+        members: {
+          include: { user: true },
+          orderBy: { joinedAt: 'asc' },
+        },
         posts: {
-          include: { author: true },
+          include: {
+            author: true,
+            reactions: true,
+            comments: true,
+          },
           orderBy: { createdAt: 'desc' },
         },
       },
@@ -151,19 +246,36 @@ groupRouter.get('/groups/:slug', requireAuth, async (req: AuthenticatedRequest, 
 
     const posts =
       group.visibility === GroupVisibility.PUBLIC || membership
-        ? group.posts.map(mapGroupPost)
+        ? group.posts.map(mapGroupPostWithRelations)
         : []
 
     res.json({
-      group: {
-        ...mapGroup(group),
-        membershipStatus: membership ? 'member' : 'non-member',
-        joinRequestStatus: joinRequest?.status.toLowerCase() ?? null,
-        viewerRole: membership?.groupRole.toLowerCase() ?? null,
-      },
+      group: mapGroupPayload(
+        group,
+        membership ? 'member' : 'non-member',
+        joinRequest?.status.toLowerCase() ?? null,
+        membership?.groupRole.toLowerCase() ?? null,
+      ),
       members: group.members.map(mapGroupMember),
       forumPosts: posts,
     })
+  } catch (error) {
+    next(error)
+  }
+})
+
+groupRouter.get('/groups/:slug/members', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
+    await assertCanViewInternal(group.id, req.auth!.userId)
+
+    const members = await prisma.groupMember.findMany({
+      where: { groupId: group.id },
+      include: { user: true },
+      orderBy: { joinedAt: 'asc' },
+    })
+
+    res.json(members.map(mapGroupMember))
   } catch (error) {
     next(error)
   }
@@ -177,7 +289,10 @@ groupRouter.patch('/groups/:slug', requireAuth, async (req: AuthenticatedRequest
     await assertManager(group.id, req.auth!.userId)
 
     if (input.slug && input.slug !== slug) {
-      const existing = await prisma.group.findUnique({ where: { slug: input.slug }, select: { id: true } })
+      const existing = await prisma.group.findUnique({
+        where: { slug: input.slug },
+        select: { id: true },
+      })
       if (existing) {
         throw new HttpError(409, 'Slug grup sudah dipakai.')
       }
@@ -200,7 +315,10 @@ groupRouter.patch('/groups/:slug', requireAuth, async (req: AuthenticatedRequest
       },
     })
 
-    res.json(mapGroup(updated))
+    const membership = await assertMember(group.id, req.auth!.userId)
+    res.json(
+      mapGroupPayload(updated, 'member', null, membership.groupRole.toLowerCase()),
+    )
   } catch (error) {
     next(error)
   }
@@ -254,8 +372,7 @@ groupRouter.post('/groups/:slug/join-requests', requireAuth, async (req: Authent
 
 groupRouter.get('/groups/:slug/join-requests', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const slug = String(req.params.slug)
-    const group = await prisma.group.findUniqueOrThrow({ where: { slug } })
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
     await assertManager(group.id, req.auth!.userId)
 
     const requests = await prisma.groupJoinRequest.findMany({
@@ -356,8 +473,7 @@ groupRouter.post('/groups/:slug/members/:memberId/role', requireAuth, async (req
 
 groupRouter.post('/groups/:slug/leave', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const slug = String(req.params.slug)
-    const group = await prisma.group.findUniqueOrThrow({ where: { slug } })
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
     const membership = await prisma.groupMember.findFirst({
       where: { groupId: group.id, userId: req.auth!.userId },
     })
@@ -406,15 +522,18 @@ groupRouter.post('/groups/:slug/members/:memberId/kick', requireAuth, async (req
 
 groupRouter.get('/groups/:slug/posts', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const slug = String(req.params.slug)
-    const group = await prisma.group.findUniqueOrThrow({ where: { slug } })
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
     await assertCanViewInternal(group.id, req.auth!.userId)
     const posts = await prisma.groupPost.findMany({
       where: { groupId: group.id },
-      include: { author: true },
+      include: {
+        author: true,
+        reactions: true,
+        comments: true,
+      },
       orderBy: { createdAt: 'desc' },
     })
-    res.json(posts.map(mapGroupPost))
+    res.json(posts.map(mapGroupPostWithRelations))
   } catch (error) {
     next(error)
   }
@@ -423,18 +542,145 @@ groupRouter.get('/groups/:slug/posts', requireAuth, async (req: AuthenticatedReq
 groupRouter.post('/groups/:slug/posts', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const slug = String(req.params.slug)
-    const input = z.object({ content: z.string().min(1) }).parse(req.body)
+    const input = z.object({
+      blocks: groupPostBlocksSchema,
+      images: z.array(z.string()).default([]),
+    }).parse(req.body)
     const group = await prisma.group.findUniqueOrThrow({ where: { slug } })
-    await assertCanViewInternal(group.id, req.auth!.userId)
+    await assertMember(group.id, req.auth!.userId)
+
     const post = await prisma.groupPost.create({
       data: {
         groupId: group.id,
         authorId: req.auth!.userId,
+        blocks: input.blocks,
+        images: input.images,
+      },
+      include: {
+        author: true,
+        reactions: true,
+        comments: true,
+      },
+    })
+    res.status(201).json(mapGroupPostWithRelations(post))
+  } catch (error) {
+    next(error)
+  }
+})
+
+groupRouter.get('/groups/:slug/posts/:postId/comments', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
+    const postId = String(req.params.postId)
+    await assertCanViewInternal(group.id, req.auth!.userId)
+
+    const post = await prisma.groupPost.findUnique({
+      where: { id: postId },
+      select: { id: true, groupId: true },
+    })
+    if (!post || post.groupId !== group.id) {
+      throw new HttpError(404, 'Postingan grup tidak ditemukan.')
+    }
+
+    const comments = await prisma.groupPostComment.findMany({
+      where: { groupPostId: postId },
+      include: { author: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    res.json(comments.map(mapGroupCommentWithAuthor))
+  } catch (error) {
+    next(error)
+  }
+})
+
+groupRouter.post('/groups/:slug/posts/:postId/comments', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
+    const postId = String(req.params.postId)
+    const input = z.object({
+      content: z.string().min(1),
+      parentId: z.string().nullable().optional(),
+    }).parse(req.body)
+    await assertCanViewInternal(group.id, req.auth!.userId)
+    await assertMember(group.id, req.auth!.userId)
+
+    const post = await prisma.groupPost.findUnique({
+      where: { id: postId },
+      select: { id: true, groupId: true },
+    })
+    if (!post || post.groupId !== group.id) {
+      throw new HttpError(404, 'Postingan grup tidak ditemukan.')
+    }
+
+    if (input.parentId) {
+      const parent = await prisma.groupPostComment.findUnique({
+        where: { id: input.parentId },
+        select: { id: true, groupPostId: true },
+      })
+      if (!parent || parent.groupPostId !== postId) {
+        throw new HttpError(400, 'Komentar induk tidak valid.')
+      }
+    }
+
+    const comment = await prisma.groupPostComment.create({
+      data: {
+        groupPostId: postId,
+        authorId: req.auth!.userId,
         content: input.content,
+        parentId: input.parentId ?? null,
       },
       include: { author: true },
     })
-    res.status(201).json(mapGroupPost(post))
+    res.status(201).json(mapGroupCommentWithAuthor(comment))
+  } catch (error) {
+    next(error)
+  }
+})
+
+groupRouter.post('/groups/:slug/posts/:postId/reactions', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
+    const postId = String(req.params.postId)
+    const input = z.object({
+      type: z.enum(['like', 'dislike']),
+    }).parse(req.body)
+    await assertCanViewInternal(group.id, req.auth!.userId)
+    await assertMember(group.id, req.auth!.userId)
+
+    const post = await prisma.groupPost.findUnique({
+      where: { id: postId },
+      select: { id: true, groupId: true },
+    })
+    if (!post || post.groupId !== group.id) {
+      throw new HttpError(404, 'Postingan grup tidak ditemukan.')
+    }
+
+    const existing = await prisma.groupPostReaction.findFirst({
+      where: {
+        groupPostId: postId,
+        userId: req.auth!.userId,
+      },
+    })
+
+    if (existing && existing.type === input.type.toUpperCase()) {
+      await prisma.groupPostReaction.delete({ where: { id: existing.id } })
+    } else if (existing) {
+      await prisma.groupPostReaction.update({
+        where: { id: existing.id },
+        data: { type: input.type === 'like' ? ReactionType.LIKE : ReactionType.DISLIKE },
+      })
+    } else {
+      await prisma.groupPostReaction.create({
+        data: {
+          groupPostId: postId,
+          userId: req.auth!.userId,
+          type: input.type === 'like' ? ReactionType.LIKE : ReactionType.DISLIKE,
+        },
+      })
+    }
+
+    res.json({ ok: true })
   } catch (error) {
     next(error)
   }
@@ -442,14 +688,43 @@ groupRouter.post('/groups/:slug/posts', requireAuth, async (req: AuthenticatedRe
 
 groupRouter.get('/groups/:slug/materials', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const slug = String(req.params.slug)
-    const group = await prisma.group.findUniqueOrThrow({ where: { slug } })
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
     await assertCanViewInternal(group.id, req.auth!.userId)
     const materials = await prisma.groupMaterial.findMany({
       where: { groupId: group.id },
       orderBy: { createdAt: 'desc' },
     })
-    res.json(materials.map((material) => ({ ...material, createdAt: material.createdAt.toISOString() })))
+    res.json(materials.map(mapGroupMaterial))
+  } catch (error) {
+    next(error)
+  }
+})
+
+groupRouter.post('/groups/:slug/materials', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
+    const input = groupMaterialSchema.parse(req.body)
+    await assertTaskManager(group.id, req.auth!.userId)
+
+    if (!input.resourceUrl && !input.fileUrl) {
+      throw new HttpError(400, 'Materi membutuhkan tautan atau file.')
+    }
+
+    const material = await prisma.groupMaterial.create({
+      data: {
+        groupId: group.id,
+        uploaderId: req.auth!.userId,
+        title: input.title,
+        description: input.description,
+        type: input.type,
+        resourceUrl: input.resourceUrl || null,
+        fileUrl: input.fileUrl,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+      },
+    })
+
+    res.status(201).json(mapGroupMaterial(material))
   } catch (error) {
     next(error)
   }
@@ -457,14 +732,19 @@ groupRouter.get('/groups/:slug/materials', requireAuth, async (req: Authenticate
 
 groupRouter.get('/groups/:slug/tasks', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const slug = String(req.params.slug)
-    const group = await prisma.group.findUniqueOrThrow({ where: { slug } })
+    const group = await prisma.group.findUniqueOrThrow({ where: { slug: String(req.params.slug) } })
     await assertCanViewInternal(group.id, req.auth!.userId)
     const tasks = await prisma.groupTask.findMany({
       where: { groupId: group.id },
       orderBy: { createdAt: 'desc' },
     })
-    res.json(tasks.map((task) => ({ ...task, createdAt: task.createdAt.toISOString(), dueDate: task.dueDate.toISOString() })))
+    res.json(
+      tasks.map((task) => ({
+        ...task,
+        createdAt: task.createdAt.toISOString(),
+        dueDate: task.dueDate.toISOString(),
+      })),
+    )
   } catch (error) {
     next(error)
   }
@@ -494,7 +774,10 @@ groupRouter.get('/groups/:slug/tasks/:taskId', requireAuth, async (req: Authenti
     })
 
     res.json({
-      group: mapGroup(group),
+      group: {
+        ...mapGroup(group),
+        viewerRole: membership?.groupRole.toLowerCase() ?? null,
+      },
       task: {
         ...task,
         createdAt: task.createdAt.toISOString(),

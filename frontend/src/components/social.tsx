@@ -9,7 +9,9 @@ import {
   Heart,
   ImagePlus,
   MessageCircle,
+  Minus,
   Plus,
+  Search,
   Send,
   Share2,
   ThumbsDown,
@@ -41,6 +43,7 @@ import {
   type FeedPost,
 } from '@/services/post-service'
 import { getSurahDetail, getSurahList } from '@/services/quran-service'
+import { uploadPostImages } from '@/services/upload-service'
 import type { Ayah, CommentThread, PostContentBlock, Profile, QuranQuoteBlock } from '@/types/domain'
 
 function initials(name: string) {
@@ -62,28 +65,34 @@ type ComposerQuoteBlock = QuranQuoteBlock & {
 
 type ComposerBlock = ComposerMarkdownBlock | ComposerQuoteBlock
 
+type ComposerSubmitInput = {
+  blocks: PostContentBlock[]
+  images: string[]
+  tags: string[]
+}
+
+type SelectedImage = {
+  file: File
+  previewUrl: string
+}
+
 function makeComposerId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
 }
 
-async function filesToDataUrls(fileList: FileList) {
-  const files = Array.from(fileList).slice(0, 4)
-  return Promise.all(
-    files.map(
-      (file) =>
-        new Promise<string>((resolve, reject) => {
-          if (file.size > 5 * 1024 * 1024) {
-            reject(new Error(`File ${file.name} melebihi 5MB.`))
-            return
-          }
+function prepareSelectedImages(fileList: FileList) {
+  return Array.from(fileList)
+    .slice(0, 4)
+    .map((file) => {
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error(`File ${file.name} melebihi 5MB.`)
+      }
 
-          const reader = new FileReader()
-          reader.onload = () => resolve(String(reader.result))
-          reader.onerror = () => reject(new Error(`Gagal membaca ${file.name}.`))
-          reader.readAsDataURL(file)
-        }),
-    ),
-  )
+      return {
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }
+    })
 }
 
 function buildPostBlocks(blocks: ComposerBlock[], images: string[]): PostContentBlock[] {
@@ -114,7 +123,7 @@ function buildPostBlocks(blocks: ComposerBlock[], images: string[]): PostContent
   return content
 }
 
-function hasComposerContent(blocks: ComposerBlock[], images: string[]) {
+function hasComposerContent(blocks: ComposerBlock[], images: SelectedImage[]) {
   return blocks.some((block) => block.type === 'quranQuote' || block.markdown.trim()) || images.length > 0
 }
 
@@ -136,6 +145,28 @@ function isLongPost(post: FeedPost) {
   return renderPostPreviewText(post).length > 420
 }
 
+function truncateBlocks(blocks: PostContentBlock[]) {
+  let remaining = 380
+  const result: PostContentBlock[] = []
+
+  for (const block of blocks) {
+    if (block.type !== 'markdown') {
+      result.push(block)
+      continue
+    }
+
+    if (remaining <= 0) {
+      break
+    }
+
+    const nextMarkdown = block.markdown.slice(0, remaining)
+    result.push({ ...block, markdown: nextMarkdown })
+    remaining -= nextMarkdown.length
+  }
+
+  return result
+}
+
 export function QuranQuotePreview({ quote }: { quote: QuranQuoteBlock }) {
   return (
     <Card className="border-gold-400/40 bg-gold-400/8 p-4">
@@ -151,6 +182,83 @@ export function QuranQuotePreview({ quote }: { quote: QuranQuoteBlock }) {
         {quote.surahNameLatin} {quote.ayahNumber}
       </p>
     </Card>
+  )
+}
+
+function ImageLightbox({
+  image,
+  open,
+  onOpenChange,
+}: {
+  image: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const [zoom, setZoom] = useState(1)
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setZoom(1)
+        }
+        onOpenChange(nextOpen)
+      }}
+    >
+      <DialogContent className="w-[min(96vw,1080px)] bg-black/95 p-4">
+        <div className="flex items-center justify-between gap-3 pb-3 text-white">
+          <DialogTitle className="text-base font-semibold">Pratinjau gambar</DialogTitle>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setZoom((current) => Math.max(1, current - 0.25))}>
+              <Minus className="h-4 w-4" />
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setZoom((current) => Math.min(3, current + 0.25))}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="max-h-[80vh] overflow-auto rounded-[1.5rem] bg-black/80 p-4">
+          {image ? (
+            <img
+              src={image}
+              alt="Preview"
+              className="mx-auto max-h-[72vh] w-auto max-w-full rounded-[1.5rem] object-contain transition-transform"
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+            />
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ClickableImageGrid({
+  images,
+  alt,
+}: {
+  images: string[]
+  alt: string
+}) {
+  const [activeImage, setActiveImage] = useState<string | null>(null)
+
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {images.map((image, imageIndex) => (
+          <button
+            key={`${image}-${imageIndex}`}
+            type="button"
+            className="overflow-hidden rounded-[1.5rem]"
+            onClick={() => setActiveImage(image)}
+          >
+            <img src={image} alt={alt} className="h-64 w-full object-cover transition hover:scale-[1.02]" />
+          </button>
+        ))}
+      </div>
+
+      <ImageLightbox image={activeImage} open={Boolean(activeImage)} onOpenChange={(open) => !open && setActiveImage(null)} />
+    </>
   )
 }
 
@@ -214,11 +322,15 @@ function QuranPickerDialog({
             </label>
             <label className="space-y-2 text-sm font-medium text-ink-700">
               <span>Cari ayat</span>
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Nomor ayat atau kata terjemahan"
-              />
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Nomor ayat atau kata terjemahan"
+                  className="pl-11"
+                />
+              </div>
             </label>
           </div>
           <ScrollArea className="h-[50vh] rounded-[2rem] border border-black/8 bg-black/[0.02] p-4">
@@ -258,19 +370,32 @@ function QuranPickerDialog({
 function CommentSection({ postId, currentUserId }: { postId: string; currentUserId: string }) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
+  const [replyOpenFor, setReplyOpenFor] = useState<string | null>(null)
   const commentsQuery = useQuery({
     queryKey: ['comments', postId],
     queryFn: () => getComments(postId),
   })
   const mutation = useMutation({
-    mutationFn: () => addComment(postId, currentUserId, draft, null),
-    onSuccess: async () => {
-      setDraft('')
-      await queryClient.invalidateQueries({ queryKey: ['comments', postId] })
-      await queryClient.invalidateQueries({ queryKey: ['feed'] })
-      await queryClient.invalidateQueries({ queryKey: ['explore'] })
-      await queryClient.invalidateQueries({ queryKey: ['profile'] })
-      await queryClient.invalidateQueries({ queryKey: ['post', postId] })
+    mutationFn: ({ content, parentId }: { content: string; parentId: string | null }) =>
+      addComment(postId, currentUserId, content, parentId),
+    onSuccess: async (_, variables) => {
+      if (variables.parentId) {
+        setReplyDrafts((current) => ({ ...current, [variables.parentId!]: '' }))
+        setReplyOpenFor(null)
+      } else {
+        setDraft('')
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['comments', postId] }),
+        queryClient.invalidateQueries({ queryKey: ['feed'] }),
+        queryClient.invalidateQueries({ queryKey: ['explore'] }),
+        queryClient.invalidateQueries({ queryKey: ['profile'] }),
+        queryClient.invalidateQueries({ queryKey: ['post', postId] }),
+      ])
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
     },
   })
 
@@ -297,7 +422,7 @@ function CommentSection({ postId, currentUserId }: { postId: string; currentUser
           size="sm"
           variant="secondary"
           disabled={!draft.trim() || mutation.isPending}
-          onClick={() => mutation.mutate()}
+          onClick={() => mutation.mutate({ content: draft, parentId: null })}
         >
           Kirim
         </Button>
@@ -305,13 +430,58 @@ function CommentSection({ postId, currentUserId }: { postId: string; currentUser
       <div className="space-y-3">
         {topLevel.map((comment) => (
           <div key={comment.id} className="rounded-3xl bg-black/3 p-4">
-            <p className="text-sm text-ink-700">{comment.content}</p>
-            <p className="mt-2 text-xs text-ink-400">{relativeTime(comment.createdAt)}</p>
+            <div className="flex items-center gap-3">
+              <Avatar src={comment.authorAvatar ?? ''} fallback={initials(comment.authorName ?? 'A')} className="h-9 w-9" />
+              <div>
+                <p className="text-sm font-semibold text-ink-900">{comment.authorName ?? 'Pengguna'}</p>
+                <p className="text-xs text-ink-400">{relativeTime(comment.createdAt)}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-sm leading-7 text-ink-700">{comment.content}</p>
+            <button
+              type="button"
+              className="mt-3 text-xs font-semibold text-gold-500"
+              onClick={() => setReplyOpenFor((current) => (current === comment.id ? null : comment.id))}
+            >
+              Balas
+            </button>
+
+            {replyOpenFor === comment.id ? (
+              <div className="mt-3 flex gap-2">
+                <Input
+                  value={replyDrafts[comment.id] ?? ''}
+                  onChange={(event) => setReplyDrafts((current) => ({ ...current, [comment.id]: event.target.value }))}
+                  placeholder={`Balas ${comment.authorName ?? 'komentar'}...`}
+                  className="h-10 rounded-full bg-white"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!replyDrafts[comment.id]?.trim() || mutation.isPending}
+                  onClick={() =>
+                    mutation.mutate({
+                      content: replyDrafts[comment.id],
+                      parentId: comment.id,
+                    })
+                  }
+                >
+                  Kirim
+                </Button>
+              </div>
+            ) : null}
+
             {repliesByParent[comment.id]?.length ? (
               <div className="mt-3 space-y-2 border-l border-gold-400/30 pl-4">
                 {repliesByParent[comment.id].map((reply) => (
-                  <div key={reply.id} className="rounded-2xl bg-white px-3 py-3 text-sm text-ink-600">
-                    {reply.content}
+                  <div key={reply.id} className="rounded-2xl bg-white px-3 py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar src={reply.authorAvatar ?? ''} fallback={initials(reply.authorName ?? 'A')} className="h-8 w-8" />
+                      <div>
+                        <p className="text-sm font-semibold text-ink-900">{reply.authorName ?? 'Pengguna'}</p>
+                        <p className="text-xs text-ink-400">{relativeTime(reply.createdAt)}</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-ink-600">{reply.content}</p>
                   </div>
                 ))}
               </div>
@@ -343,56 +513,33 @@ function PostBlocks({ post, expanded }: { post: FeedPost; expanded: boolean }) {
           return <QuranQuotePreview key={`${post.id}-quote-${index}`} quote={block} />
         }
 
-        return (
-          <div key={`${post.id}-images-${index}`} className="grid gap-3 sm:grid-cols-2">
-            {block.images.map((image, imageIndex) => (
-              <img
-                key={`${post.id}-image-${imageIndex}`}
-                src={image}
-                alt="Post"
-                className="h-64 w-full rounded-[1.5rem] object-cover"
-              />
-            ))}
-          </div>
-        )
+        return <ClickableImageGrid key={`${post.id}-images-${index}`} images={block.images} alt="Post" />
       })}
     </div>
   )
 }
 
-function truncateBlocks(blocks: PostContentBlock[]) {
-  let remaining = 380
-  const result: PostContentBlock[] = []
-
-  for (const block of blocks) {
-    if (block.type !== 'markdown') {
-      result.push(block)
-      continue
-    }
-
-    if (remaining <= 0) {
-      break
-    }
-
-    const nextMarkdown = block.markdown.slice(0, remaining)
-    result.push({ ...block, markdown: nextMarkdown })
-    remaining -= nextMarkdown.length
-  }
-
-  return result
-}
-
 export function PostComposerDialog({
   currentUserId: _currentUserId,
   trigger,
+  onSubmit,
+  submitLabel = 'Kirim postingan',
+  allowTags = true,
+  successMessage = 'Postingan berhasil dibagikan.',
+  invalidateKeys,
 }: {
   currentUserId: string
   trigger: React.ReactNode
+  onSubmit?: (input: ComposerSubmitInput) => Promise<unknown>
+  submitLabel?: string
+  allowTags?: boolean
+  successMessage?: string
+  invalidateKeys?: Array<readonly unknown[]>
 }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [images, setImages] = useState<string[]>([])
+  const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([])
   const [tags, setTags] = useState('')
   const [blocks, setBlocks] = useState<ComposerBlock[]>([
     { id: makeComposerId('markdown'), type: 'markdown', markdown: '' },
@@ -400,26 +547,43 @@ export function PostComposerDialog({
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null)
 
   const createPostMutation = useMutation({
-    mutationFn: () =>
-      createPost({
-        blocks: buildPostBlocks(blocks, images),
-        images,
-        tags: tags
-          .split(',')
-          .map((entry) => entry.trim())
-          .filter(Boolean),
-      }),
+    mutationFn: async () => {
+      const uploadedImages = selectedImages.length
+        ? await uploadPostImages(selectedImages.map((image) => image.file))
+        : []
+
+      const imageUrls = uploadedImages.map((item) => item.url)
+      const payload: ComposerSubmitInput = {
+        blocks: buildPostBlocks(blocks, imageUrls),
+        images: imageUrls,
+        tags: allowTags
+          ? tags
+              .split(',')
+              .map((entry) => entry.trim())
+              .filter(Boolean)
+          : [],
+      }
+
+      const submit = onSubmit ?? createPost
+      return submit(payload)
+    },
     onSuccess: async () => {
-      toast.success('Postingan berhasil dibagikan.')
+      toast.success(successMessage)
       setBlocks([{ id: makeComposerId('markdown'), type: 'markdown', markdown: '' }])
-      setImages([])
+      setSelectedImages([])
       setTags('')
       setOpen(false)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['feed'] }),
-        queryClient.invalidateQueries({ queryKey: ['explore'] }),
-        queryClient.invalidateQueries({ queryKey: ['profile'] }),
-      ])
+
+      const defaultKeys: Array<readonly unknown[]> = [
+        ['feed'],
+        ['explore'],
+        ['profile'],
+      ]
+
+      await Promise.all((invalidateKeys ?? defaultKeys).map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
     },
   })
 
@@ -520,15 +684,17 @@ export function PostComposerDialog({
               ),
             )}
 
-            <div className="grid gap-4 md:grid-cols-[1fr_220px]">
-              <label className="space-y-2 text-sm font-medium text-ink-700">
-                <span>Tag</span>
-                <Input
-                  value={tags}
-                  onChange={(event) => setTags(event.target.value)}
-                  placeholder="tafsir, komunitas, akhlak"
-                />
-              </label>
+            <div className={`grid gap-4 ${allowTags ? 'md:grid-cols-[1fr_220px]' : ''}`}>
+              {allowTags ? (
+                <label className="space-y-2 text-sm font-medium text-ink-700">
+                  <span>Tag</span>
+                  <Input
+                    value={tags}
+                    onChange={(event) => setTags(event.target.value)}
+                    placeholder="tafsir, komunitas, akhlak"
+                  />
+                </label>
+              ) : null}
               <label className="space-y-2 text-sm font-medium text-ink-700">
                 <span>Gambar</span>
                 <div className="flex items-center gap-2">
@@ -544,9 +710,11 @@ export function PostComposerDialog({
                         if (!event.target.files?.length) {
                           return
                         }
-                        void filesToDataUrls(event.target.files)
-                          .then((nextImages) => setImages(nextImages))
-                          .catch((error: Error) => toast.error(error.message))
+                        try {
+                          setSelectedImages(prepareSelectedImages(event.target.files))
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : 'Gagal memuat gambar.')
+                        }
                       }}
                     />
                   </label>
@@ -554,12 +722,8 @@ export function PostComposerDialog({
               </label>
             </div>
 
-            {images.length ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {images.map((image, index) => (
-                  <img key={index} src={image} alt="Preview" className="h-52 w-full rounded-[1.5rem] object-cover" />
-                ))}
-              </div>
+            {selectedImages.length ? (
+              <ClickableImageGrid images={selectedImages.map((image) => image.previewUrl)} alt="Preview upload" />
             ) : null}
 
             <div className="flex justify-end gap-3">
@@ -567,11 +731,11 @@ export function PostComposerDialog({
                 Batal
               </Button>
               <Button
-                disabled={!hasComposerContent(blocks, images) || createPostMutation.isPending}
+                disabled={!hasComposerContent(blocks, selectedImages) || createPostMutation.isPending}
                 onClick={() => createPostMutation.mutate()}
               >
                 <Send className="mr-2 h-4 w-4" />
-                Kirim postingan
+                {submitLabel}
               </Button>
             </div>
           </div>
@@ -610,30 +774,50 @@ export function PostCard({ post, currentUserId, showComments = false }: { post: 
       setReportReason('')
       await queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] })
     },
+    onError: (error: Error) => {
+      toast.error(error.message)
+    },
   })
 
   async function handleShare() {
     const url = `${window.location.origin}/posts/${post.id}`
+    const shareText = renderPostPreviewText(post).slice(0, 120)
+    const usesNativeShare = typeof navigator.share === 'function'
 
     try {
-      if (navigator.share) {
+      if (usesNativeShare) {
         await navigator.share({
           title: `${post.authorName} di Ilmuna`,
-          text: renderPostPreviewText(post).slice(0, 120),
+          text: shareText,
           url,
         })
-      } else {
+      } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url)
         toast.success('Tautan postingan disalin.')
+      } else {
+        throw new Error('Clipboard tidak tersedia.')
       }
+
       await sharePost(post.id)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['feed'] }),
         queryClient.invalidateQueries({ queryKey: ['explore'] }),
         queryClient.invalidateQueries({ queryKey: ['post', post.id] }),
       ])
-    } catch {
-      toast.error('Berbagi postingan dibatalkan.')
+
+      if (usesNativeShare) {
+        toast.success('Tautan siap dibagikan.')
+      }
+    } catch (error) {
+      if (
+        usesNativeShare &&
+        error instanceof DOMException &&
+        (error.name === 'AbortError' || error.name === 'NotAllowedError')
+      ) {
+        return
+      }
+
+      toast.error(error instanceof Error ? error.message : 'Gagal membagikan tautan.')
     }
   }
 
@@ -655,10 +839,12 @@ export function PostCard({ post, currentUserId, showComments = false }: { post: 
             </p>
           </div>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>
-          <AlertTriangle className="mr-2 h-4 w-4" />
-          Report
-        </Button>
+        {post.authorId !== currentUserId ? (
+          <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            Report
+          </Button>
+        ) : null}
       </div>
 
       <PostBlocks post={post} expanded={expanded} />
@@ -792,29 +978,76 @@ export function ProfileHeader({
   isOwner: boolean
   onFollow: () => void
 }) {
+  const [confirmUnfollowOpen, setConfirmUnfollowOpen] = useState(false)
+  const [activeImage, setActiveImage] = useState<string | null>(null)
+
   return (
-    <Card className="overflow-hidden p-0">
-      <div className="h-44 bg-cover bg-center" style={{ backgroundImage: `url(${profile.coverUrl})` }} />
-      <div className="space-y-4 px-5 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Avatar src={profile.avatarUrl} fallback={initials(profile.name)} className="-mt-16 h-24 w-24 ring-4 ring-white" />
-            <div>
-              <h1 className="text-2xl font-semibold text-ink-900">{profile.name}</h1>
-              <p className="text-sm text-ink-500">@{profile.username}</p>
+    <>
+      <Card className="overflow-hidden p-0">
+        <button
+          type="button"
+          className="block h-44 w-full bg-cover bg-center"
+          style={{ backgroundImage: `url(${profile.coverUrl})` }}
+          onClick={() => profile.coverUrl && setActiveImage(profile.coverUrl)}
+        />
+        <div className="space-y-4 px-5 py-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <button type="button" onClick={() => profile.avatarUrl && setActiveImage(profile.avatarUrl)}>
+                <Avatar
+                  src={profile.avatarUrl}
+                  fallback={initials(profile.name)}
+                  className="-mt-16 h-24 w-24 ring-4 ring-white"
+                />
+              </button>
+              <div>
+                <h1 className="text-2xl font-semibold text-ink-900">{profile.name}</h1>
+                <p className="text-sm text-ink-500">@{profile.username}</p>
+              </div>
             </div>
+            {!isOwner ? (
+              profile.isFollowedByViewer ? (
+                <Button variant="secondary" className="border border-red-200 text-red-600" onClick={() => setConfirmUnfollowOpen(true)}>
+                  Unfollow
+                </Button>
+              ) : (
+                <Button onClick={onFollow}>Follow</Button>
+              )
+            ) : null}
           </div>
-          {!isOwner ? (
-            <Button onClick={onFollow}>{profile.isFollowedByViewer ? 'Unfollow' : 'Follow'}</Button>
-          ) : null}
+          <p className="text-sm leading-7 text-ink-600">{profile.bio}</p>
+          <div className="flex flex-wrap gap-4 text-sm text-ink-500">
+            <span>{profile.followersCount} pengikut</span>
+            <span>{profile.followingCount} mengikuti</span>
+            <span>{profile.postsCount} postingan</span>
+          </div>
         </div>
-        <p className="text-sm leading-7 text-ink-600">{profile.bio}</p>
-        <div className="flex flex-wrap gap-4 text-sm text-ink-500">
-          <span>{profile.followersCount} pengikut</span>
-          <span>{profile.followingCount} mengikuti</span>
-          <span>{profile.postsCount} postingan</span>
-        </div>
-      </div>
-    </Card>
+      </Card>
+
+      <Dialog open={confirmUnfollowOpen} onOpenChange={setConfirmUnfollowOpen}>
+        <DialogContent className="max-w-md">
+          <DialogTitle className="text-xl font-semibold text-ink-900">Unfollow akun ini?</DialogTitle>
+          <DialogDescription className="mt-1 text-sm text-ink-500">
+            Postingan dari akun ini tidak akan muncul lagi di feed utama Anda.
+          </DialogDescription>
+          <div className="mt-5 flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setConfirmUnfollowOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirmUnfollowOpen(false)
+                onFollow()
+              }}
+            >
+              Ya, unfollow
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ImageLightbox image={activeImage} open={Boolean(activeImage)} onOpenChange={(open) => !open && setActiveImage(null)} />
+    </>
   )
 }

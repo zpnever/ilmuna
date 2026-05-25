@@ -91,6 +91,8 @@ model User {
   groupMemberships   GroupMember[]
   joinRequests       GroupJoinRequest[]
   groupPosts         GroupPost[]
+  groupPostComments  GroupPostComment[]
+  groupPostReactions GroupPostReaction[]
   materialsUploaded  GroupMaterial[]       @relation("MaterialUploader")
   groupTasks         GroupTask[]           @relation("TaskCreator")
   taskSubmissions    GroupTaskSubmission[]
@@ -226,14 +228,43 @@ model GroupJoinRequest {
 }
 
 model GroupPost {
-  id         String   @id @default(cuid())
-  groupId     String
+  id         String              @id @default(cuid())
+  groupId    String
+  authorId   String
+  blocks     Json
+  images     Json                @default("[]")
+  shareCount Int                 @default(0)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+  group      Group               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  author     User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments   GroupPostComment[]
+  reactions  GroupPostReaction[]
+}
+
+model GroupPostComment {
+  id          String             @id @default(cuid())
+  groupPostId String
   authorId    String
+  parentId    String?
   content     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime           @default(now())
+  groupPost   GroupPost          @relation(fields: [groupPostId], references: [id], onDelete: Cascade)
+  author      User               @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent      GroupPostComment?  @relation("GroupCommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies     GroupPostComment[] @relation("GroupCommentReplies")
+}
+
+model GroupPostReaction {
+  id          String       @id @default(cuid())
+  groupPostId String
+  userId      String
+  type        ReactionType
+  createdAt   DateTime     @default(now())
+  groupPost   GroupPost    @relation(fields: [groupPostId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupPostId, userId])
 }
 
 model GroupMaterial {
@@ -244,6 +275,9 @@ model GroupMaterial {
   description  String
   type         String
   resourceUrl  String?
+  fileUrl      String?
+  fileName     String?
+  mimeType     String?
   createdAt    DateTime @default(now())
   group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   uploader     User     @relation("MaterialUploader", fields: [uploaderId], references: [id], onDelete: Cascade)

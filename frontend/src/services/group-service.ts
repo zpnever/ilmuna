@@ -1,10 +1,12 @@
 import { apiRequest } from '@/lib/api'
 import type {
+  GroupCommentThread,
   Group,
   GroupDiscussionPost,
   GroupJoinRequest,
   GroupMaterial,
   GroupMember,
+  PostContentBlock,
   Task,
   TaskSubmission,
 } from '@/types/domain'
@@ -30,6 +32,24 @@ interface CreateGroupInput {
   tags: string[]
 }
 
+interface CreateGroupPostInput {
+  blocks: PostContentBlock[]
+  images: string[]
+}
+
+function normalizeGroupPost(post: GroupDiscussionPost): GroupDiscussionPost {
+  return {
+    ...post,
+    content: (post.content ?? []) as PostContentBlock[],
+    images: post.images ?? [],
+    likeUserIds: post.likeUserIds ?? [],
+    dislikeUserIds: post.dislikeUserIds ?? [],
+    shareCount: post.shareCount ?? 0,
+    commentCount: post.commentCount ?? 0,
+    engagementScore: post.engagementScore ?? 0,
+  }
+}
+
 export async function getGroups() {
   const groups = await apiRequest<Group[]>('/groups')
   return groups.map((group) => ({
@@ -45,7 +65,7 @@ export async function getGroupDetail(slug: string) {
   return {
     group: {
       ...payload.group,
-      forumPosts: payload.forumPosts,
+      forumPosts: payload.forumPosts.map(normalizeGroupPost),
       materials: [],
       tasks: [],
     },
@@ -116,13 +136,56 @@ export async function kickGroupMember(slug: string, memberId: string) {
 }
 
 export async function getGroupPosts(slug: string) {
-  return apiRequest<GroupDiscussionPost[]>(`/groups/${slug}/posts`)
+  const posts = await apiRequest<GroupDiscussionPost[]>(`/groups/${slug}/posts`)
+  return posts.map(normalizeGroupPost)
 }
 
-export async function createGroupPost(slug: string, content: string) {
-  return apiRequest<GroupDiscussionPost>(`/groups/${slug}/posts`, {
+export async function createGroupPost(slug: string, input: CreateGroupPostInput) {
+  const post = await apiRequest<GroupDiscussionPost>(`/groups/${slug}/posts`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(input),
+  })
+  return normalizeGroupPost(post)
+}
+
+export async function getGroupPostComments(slug: string, postId: string) {
+  return apiRequest<GroupCommentThread[]>(`/groups/${slug}/posts/${postId}/comments`)
+}
+
+export async function addGroupPostComment(
+  slug: string,
+  postId: string,
+  content: string,
+  parentId: string | null,
+) {
+  return apiRequest<GroupCommentThread>(`/groups/${slug}/posts/${postId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ content, parentId }),
+  })
+}
+
+export async function toggleGroupPostReaction(
+  slug: string,
+  postId: string,
+  type: 'like' | 'dislike',
+) {
+  return apiRequest<{ ok: true }>(`/groups/${slug}/posts/${postId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ type }),
+  })
+}
+
+export async function getGroupMembers(slug: string) {
+  return apiRequest<GroupMember[]>(`/groups/${slug}/members`)
+}
+
+export async function createGroupMaterial(
+  slug: string,
+  input: Pick<GroupMaterial, 'title' | 'description' | 'type' | 'resourceUrl' | 'fileUrl' | 'fileName' | 'mimeType'>,
+) {
+  return apiRequest<GroupMaterial>(`/groups/${slug}/materials`, {
+    method: 'POST',
+    body: JSON.stringify(input),
   })
 }
 

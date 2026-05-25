@@ -64,7 +64,8 @@ export async function apiRequest<T>(
   retryOnAuthError = true,
 ): Promise<T> {
   const headers = new Headers(init.headers)
-  if (!headers.has('Content-Type') && init.body) {
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData
+  if (!headers.has('Content-Type') && init.body && !isFormData) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -86,7 +87,7 @@ export async function apiRequest<T>(
       }
 
       const retryHeaders = new Headers(init.headers)
-      if (!retryHeaders.has('Content-Type') && init.body) {
+      if (!retryHeaders.has('Content-Type') && init.body && !isFormData) {
         retryHeaders.set('Content-Type', 'application/json')
       }
       retryHeaders.set('Authorization', `Bearer ${nextToken}`)

@@ -9,6 +9,7 @@ import { notificationRouter } from './notification-routes.js'
 import { postRouter } from './post-routes.js'
 import { profileRouter } from './profile-routes.js'
 import { referenceRouter } from './reference-routes.js'
+import { uploadRouter } from './upload-routes.js'
 
 export function registerRoutes(app: Express) {
   const router = Router()
@@ -21,6 +22,7 @@ export function registerRoutes(app: Express) {
   router.use('/api/v1', bookmarkRouter)
   router.use('/api/v1', notificationRouter)
   router.use('/api/v1', adminRouter)
+  router.use('/api/v1', uploadRouter)
 
   app.use(router)
 }

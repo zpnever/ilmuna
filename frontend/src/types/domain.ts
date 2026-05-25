@@ -83,6 +83,9 @@ export interface CommentThread {
   parentId: string | null
   content: string
   createdAt: string
+  authorName?: string
+  authorUsername?: string
+  authorAvatar?: string
 }
 
 export type GroupRole = 'moderator' | 'admin' | 'ustadz' | 'anggota'
@@ -103,20 +106,45 @@ export interface GroupJoinRequest {
 
 export interface GroupMaterial {
   id: string
+  groupId?: string
+  uploaderId?: string
   title: string
   description: string
   type: 'pdf' | 'link' | 'text' | string
   resourceUrl?: string | null
+  fileUrl?: string | null
+  fileName?: string | null
+  mimeType?: string | null
   createdAt: string
 }
 
 export interface GroupDiscussionPost {
   id: string
+  groupId: string
   authorId: string
-  authorName?: string
-  authorUsername?: string
+  authorName: string
+  authorUsername: string
+  authorAvatar: string
+  content: PostContentBlock[]
+  images: string[]
+  createdAt: string
+  likeUserIds: string[]
+  dislikeUserIds: string[]
+  shareCount: number
+  commentCount: number
+  engagementScore: number
+}
+
+export interface GroupCommentThread {
+  id: string
+  groupPostId: string
+  authorId: string
+  parentId: string | null
   content: string
   createdAt: string
+  authorName?: string
+  authorUsername?: string
+  authorAvatar?: string
 }
 
 export interface GroupMember {
@@ -235,6 +263,21 @@ export interface HadithBookmark {
   translation: string
   note: string
   createdAt: string
+}
+
+export interface ReferenceBookmarks {
+  quran: QuranBookmark[]
+  hadith: HadithBookmark[]
+}
+
+export interface MediaUpload {
+  url: string
+  fileName: string
+  mimeType: string
+}
+
+export interface MediaUploadBatch {
+  files: MediaUpload[]
 }
 
 export interface NotificationItem {

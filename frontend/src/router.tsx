@@ -157,6 +157,13 @@ const groupSettingsRoute = createRoute({
   component: lazyRouteComponent(() => import('@/screens/group-screens'), 'GroupSettingsScreen'),
 })
 
+const groupMembersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/groups/$slug/members',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/group-screens'), 'GroupMembersScreen'),
+})
+
 const groupTaskDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/groups/$slug/tasks/$taskId',
@@ -169,6 +176,13 @@ const referencesRoute = createRoute({
   path: '/references',
   beforeLoad: requireAuth,
   component: lazyRouteComponent(() => import('@/screens/reference-screens'), 'ReferencesHubScreen'),
+})
+
+const referencesBookmarksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/references/bookmarks',
+  beforeLoad: requireAuth,
+  component: lazyRouteComponent(() => import('@/screens/reference-screens'), 'ReferencesBookmarksScreen'),
 })
 
 const quranRoute = createRoute({
@@ -264,8 +278,10 @@ const routeTree = rootRoute.addChildren([
   groupMaterialsRoute,
   groupTasksRoute,
   groupSettingsRoute,
+  groupMembersRoute,
   groupTaskDetailRoute,
   referencesRoute,
+  referencesBookmarksRoute,
   quranRoute,
   quranSurahRoute,
   quranBookmarksRoute,

@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button, Card, Input, SectionHeading, Textarea } from '@/components/ui'
 import { useAuth } from '@/context/auth-context'
 import { updateMyProfile } from '@/services/profile-service'
+import { uploadAvatar, uploadCover } from '@/services/upload-service'
 
 export function SettingsScreen() {
   const navigate = useNavigate()
@@ -16,6 +17,7 @@ export function SettingsScreen() {
   const [location, setLocation] = useState('')
   const [website, setWebsite] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
+  const [coverUrl, setCoverUrl] = useState('')
   const [interests, setInterests] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
   const [notifEmail, setNotifEmail] = useState(true)
@@ -32,6 +34,7 @@ export function SettingsScreen() {
     setLocation(user.location)
     setWebsite(user.website)
     setAvatarUrl(user.avatarUrl)
+    setCoverUrl(user.coverUrl)
     setInterests(user.interests.join(', '))
     setIsPrivate(user.isPrivate)
     setNotifEmail(user.notificationPreferences.email)
@@ -48,6 +51,7 @@ export function SettingsScreen() {
         location,
         website,
         avatarUrl,
+        coverUrl,
         interests: interests
           .split(',')
           .map((item) => item.trim())
@@ -68,6 +72,28 @@ export function SettingsScreen() {
     },
   })
 
+  const avatarUploadMutation = useMutation({
+    mutationFn: uploadAvatar,
+    onSuccess: (payload) => {
+      setAvatarUrl(payload.url)
+      toast.success('Foto profil berhasil diunggah.')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
+    },
+  })
+
+  const coverUploadMutation = useMutation({
+    mutationFn: uploadCover,
+    onSuccess: (payload) => {
+      setCoverUrl(payload.url)
+      toast.success('Background profil berhasil diunggah.')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
+    },
+  })
+
   if (!user) {
     return null
   }
@@ -77,7 +103,7 @@ export function SettingsScreen() {
       <SectionHeading
         eyebrow="Pengaturan"
         title="Kelola akun Anda"
-        description="Atur profil dasar, minat, notifikasi, dan privasi akun."
+        description="Atur profil dasar, foto, minat, notifikasi, dan privasi akun."
       />
       <Card className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
@@ -104,10 +130,36 @@ export function SettingsScreen() {
             <Input value={website} onChange={(event) => setWebsite(event.target.value)} />
           </label>
         </div>
-        <label className="space-y-2 text-sm font-medium text-ink-700">
-          <span>Avatar URL</span>
-          <Input value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} />
-        </label>
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2 text-sm font-medium text-ink-700">
+            <span>Foto profil</span>
+            <Input value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) {
+                  avatarUploadMutation.mutate(file)
+                }
+              }}
+            />
+          </label>
+          <label className="space-y-2 text-sm font-medium text-ink-700">
+            <span>Background profil</span>
+            <Input value={coverUrl} onChange={(event) => setCoverUrl(event.target.value)} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) {
+                  coverUploadMutation.mutate(file)
+                }
+              }}
+            />
+          </label>
+        </div>
         <label className="space-y-2 text-sm font-medium text-ink-700">
           <span>Minat</span>
           <Input value={interests} onChange={(event) => setInterests(event.target.value)} placeholder="tafsir, komunitas, akhlak" />

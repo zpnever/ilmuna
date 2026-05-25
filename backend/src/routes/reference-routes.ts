@@ -9,6 +9,8 @@ import {
   getQuranSurahList,
   searchQuran,
 } from '../lib/reference-store.js'
+import { prisma } from '../lib/prisma.js'
+import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js'
 
 const referenceRouter = Router()
 
@@ -66,6 +68,28 @@ referenceRouter.get('/hadith/books/:bookSlug', async (req, res, next) => {
     }).parse(req.query)
     const result = await getHadithPage(req.params.bookSlug, query.limit, query.offset, query.q)
     res.json(result)
+  } catch (error) {
+    next(error)
+  }
+})
+
+referenceRouter.get('/bookmarks', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const [quran, hadith] = await Promise.all([
+      prisma.quranBookmark.findMany({
+        where: { userId: req.auth!.userId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.hadithBookmark.findMany({
+        where: { userId: req.auth!.userId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+
+    res.json({
+      quran: quran.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() })),
+      hadith: hadith.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() })),
+    })
   } catch (error) {
     next(error)
   }

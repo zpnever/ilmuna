@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { Router } from 'express'
 import { OAuth2Client } from 'google-auth-library'
 import { UserRole } from '@prisma/client'
@@ -54,25 +55,67 @@ async function issueTokens(userId: string, role: UserRole) {
 }
 
 async function verifyGoogleCredential(credential: string) {
-  const ticket = await googleClient.verifyIdToken({
-    idToken: credential,
-    audience: env.GOOGLE_CLIENT_ID,
-  })
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: env.GOOGLE_CLIENT_ID,
+    })
 
-  const payload = ticket.getPayload()
-  if (!payload?.sub || !payload.email) {
-    throw new HttpError(401, 'Identitas Google tidak valid.')
+    const payload = ticket.getPayload()
+    if (!payload?.sub || !payload.email) {
+      throw new HttpError(401, 'Identitas Google tidak valid.')
+    }
+    if (!payload.email_verified) {
+      throw new HttpError(401, 'Email Google belum terverifikasi.')
+    }
+
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      name: payload.name ?? '',
+      picture: payload.picture ?? '',
+    }
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error
+    }
+
+    const message = error instanceof Error ? error.message : ''
+    if (/Wrong recipient|Invalid token audience/i.test(message)) {
+      throw new HttpError(401, 'Google Client ID tidak cocok dengan credential yang dikirim.')
+    }
+    if (/Token used too late|expired/i.test(message)) {
+      throw new HttpError(401, 'Credential Google sudah kedaluwarsa. Silakan coba login ulang.')
+    }
+
+    throw new HttpError(
+      401,
+      'Login Google gagal diverifikasi. Pastikan origin frontend dan Google Client ID sudah sesuai.',
+    )
   }
-  if (!payload.email_verified) {
-    throw new HttpError(401, 'Email Google belum terverifikasi.')
+}
+
+function buildUsernameFromEmail(email: string) {
+  return (
+    email
+      .split('@')[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 20) || 'ilmuna'
+  )
+}
+
+async function ensureUniqueUsername(base: string) {
+  let username = base
+  let suffix = 1
+
+  while (await prisma.user.findUnique({ where: { username } })) {
+    username = `${base}-${suffix}`
+    suffix += 1
   }
 
-  return {
-    sub: payload.sub,
-    email: payload.email,
-    name: payload.name ?? '',
-    picture: payload.picture ?? '',
-  }
+  return username
 }
 
 authRouter.post('/register', async (req, res, next) => {
@@ -128,7 +171,24 @@ authRouter.post('/google', async (req, res, next) => {
     })
 
     if (!user) {
-      throw new HttpError(403, 'Registrasi akun baru sedang dinonaktifkan.')
+      const username = await ensureUniqueUsername(buildUsernameFromEmail(googlePayload.email))
+      user = await prisma.user.create({
+        data: {
+          email: googlePayload.email,
+          username,
+          name: googlePayload.name || username,
+          passwordHash: await hashPassword(crypto.randomUUID()),
+          role: UserRole.MEMBER,
+          avatarUrl: googlePayload.picture,
+          bio: '',
+          location: '',
+          website: '',
+          interests: [],
+          emailVerified: true,
+          isVerified: false,
+          googleId: googlePayload.sub,
+        },
+      })
     }
 
     user = await prisma.user.update({

@@ -37,6 +37,8 @@ async function main() {
   await prisma.groupTaskSubmission.deleteMany()
   await prisma.groupTask.deleteMany()
   await prisma.groupMaterial.deleteMany()
+  await prisma.groupPostComment.deleteMany()
+  await prisma.groupPostReaction.deleteMany()
   await prisma.groupPost.deleteMany()
   await prisma.groupJoinRequest.deleteMany()
   await prisma.groupMember.deleteMany()
@@ -55,16 +57,15 @@ async function main() {
     prisma.user.create({
       data: {
         username: 'ilmuna',
-        name: 'Ilmuna Demo',
+        name: 'Ilmuna User',
         email: 'ilmuna@gmail.com',
         passwordHash,
         role: UserRole.MEMBER,
-        bio: 'Belajar rutin, senang tafsir tematik, dan sedang membangun kebiasaan murojaah harian.',
+        bio: 'Belajar rutin, senang tafsir tematik, dan menjaga kebiasaan murojaah harian.',
         location: 'Jakarta',
-        website: 'https://ilmuna.id/demo',
+        website: 'https://ilmuna.id',
         avatarUrl: '/avatars/suko.png',
-        coverUrl:
-          'https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=1200&q=80',
+        coverUrl: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=1200&q=80',
         interests: ['tafsir', 'akhlak', 'komunitas', 'hadith'],
         emailVerified: true,
         isVerified: true,
@@ -82,8 +83,7 @@ async function main() {
         location: 'Bandung',
         website: 'https://ilmuna.id/fahmi',
         avatarUrl: '/avatars/danush.jpeg',
-        coverUrl:
-          'https://images.unsplash.com/photo-1496065187959-7f07b8353c55?auto=format&fit=crop&w=1200&q=80',
+        coverUrl: 'https://images.unsplash.com/photo-1496065187959-7f07b8353c55?auto=format&fit=crop&w=1200&q=80',
         interests: ['hafalan', 'tajwid', 'tafsir'],
         emailVerified: true,
         isVerified: true,
@@ -101,8 +101,7 @@ async function main() {
         location: 'Yogyakarta',
         website: 'https://ilmuna.id/naqiyyah',
         avatarUrl: '/avatars/willdan.png',
-        coverUrl:
-          'https://images.unsplash.com/photo-1491895200222-0fc4a4c35e18?auto=format&fit=crop&w=1200&q=80',
+        coverUrl: 'https://images.unsplash.com/photo-1491895200222-0fc4a4c35e18?auto=format&fit=crop&w=1200&q=80',
         interests: ['akhlak', 'sirah', 'keluarga'],
         emailVerified: true,
         isVerified: false,
@@ -120,8 +119,7 @@ async function main() {
         location: 'Surabaya',
         website: 'https://ilmuna.id/admin',
         avatarUrl: '/avatars/suko.png',
-        coverUrl:
-          'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
+        coverUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
         interests: ['moderasi', 'komunitas', 'produk'],
         emailVerified: true,
         isVerified: true,
@@ -139,8 +137,7 @@ async function main() {
         location: 'Makassar',
         website: 'https://ilmuna.id/hanan',
         avatarUrl: '/avatars/danush.jpeg',
-        coverUrl:
-          'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=80',
+        coverUrl: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=80',
         interests: ['komunitas', 'hafalan', 'sirah'],
         emailVerified: true,
         isVerified: false,
@@ -189,18 +186,14 @@ async function main() {
           {
             type: 'markdown',
             markdown:
-              'Catatan kajian hari ini: adab menuntut ilmu bukan hanya duduk tenang, tapi juga menjaga niat saat ilmu mulai terasa “berhasil”.',
+              'Catatan kajian hari ini: adab menuntut ilmu bukan hanya duduk tenang, tapi juga menjaga niat saat ilmu mulai terasa berhasil.',
           },
           {
             type: 'images',
-            images: [
-              'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80',
-            ],
+            images: ['https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80'],
           },
         ],
-        images: [
-          'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80',
-        ],
+        images: ['https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80'],
         tags: ['akhlak', 'komunitas'],
         createdAt: isoHoursAgo(12),
       },
@@ -212,7 +205,7 @@ async function main() {
           {
             type: 'markdown',
             markdown:
-              'Lagi eksperimen format halaqah subuh 20 menit. Ternyata justru yang singkat begini bikin jamaah lebih rutin hadir.',
+              'Lagi eksperimen format halaqah subuh 20 menit. Ternyata yang singkat justru bikin jamaah lebih rutin hadir.',
           },
         ],
         tags: ['komunitas', 'sirah'],
@@ -226,7 +219,7 @@ async function main() {
           {
             type: 'markdown',
             markdown:
-              'Baru selesai baca ulang Al-Fatihah dengan tafsir ringkas. Rasanya ayat yang sudah hafal bertahun-tahun tetap bisa membuka sudut pandang baru.',
+              'Baru selesai baca ulang Al-Fatihah dengan tafsir ringkas. Ayat yang sudah hafal bertahun-tahun tetap bisa membuka sudut pandang baru.',
           },
         ],
         tags: ['tafsir', 'hadith'],
@@ -254,7 +247,7 @@ async function main() {
           {
             type: 'markdown',
             markdown:
-              'Checklist kecil buat akhir pekan: satu halaman Qur’an, satu hadis, dan satu tindakan baik yang tidak diumumkan ke siapa-siapa.',
+              'Checklist kecil buat akhir pekan: satu halaman Qur’an, satu hadith, dan satu tindakan baik yang tidak diumumkan ke siapa-siapa.',
           },
           {
             type: 'quranQuote',
@@ -318,7 +311,7 @@ async function main() {
       {
         postId: post2.id,
         authorId: hananUser.id,
-        content: 'Catatannya rapih sekali. Boleh saya pakai untuk sesi remaja pekan ini?',
+        content: 'Catatannya rapi sekali. Boleh saya pakai untuk sesi remaja pekan ini?',
         createdAt: isoHoursAgo(9),
       },
     ],
@@ -328,12 +321,10 @@ async function main() {
     data: {
       name: 'Halaqah Subuh Al-Bayan',
       slug: 'halaqah-subuh-al-bayan',
-      description:
-        'Komunitas belajar Qur’an selepas subuh dengan fokus tadabbur, hafalan ringan, dan diskusi praktik.',
+      description: 'Komunitas belajar Qur’an selepas subuh dengan fokus tadabbur, hafalan ringan, dan diskusi praktik.',
       visibility: GroupVisibility.PUBLIC,
       inviteCode: 'ALBAYAN24',
-      coverUrl:
-        'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80',
+      coverUrl: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80',
       tags: ['hafalan', 'komunitas', 'subuh'],
       createdAt: isoHoursAgo(600),
     },
@@ -343,12 +334,10 @@ async function main() {
     data: {
       name: 'Sirah Family Circle',
       slug: 'sirah-family-circle',
-      description:
-        'Group private untuk keluarga muda yang ingin belajar sirah nabawiyah secara bertahap dan membumi.',
+      description: 'Grup private untuk keluarga muda yang ingin belajar sirah nabawiyah secara bertahap dan membumi.',
       visibility: GroupVisibility.PRIVATE,
       inviteCode: 'SIRAHFAM',
-      coverUrl:
-        'https://images.unsplash.com/photo-1475776408506-9a5371e7a068?auto=format&fit=crop&w=1200&q=80',
+      coverUrl: 'https://images.unsplash.com/photo-1475776408506-9a5371e7a068?auto=format&fit=crop&w=1200&q=80',
       tags: ['sirah', 'keluarga'],
       createdAt: isoHoursAgo(400),
     },
@@ -365,27 +354,83 @@ async function main() {
     ],
   })
 
-  await prisma.groupPost.createMany({
-    data: [
-      {
+  const [groupPost1, groupPost2, groupPost3] = await Promise.all([
+    prisma.groupPost.create({
+      data: {
         groupId: publicGroup.id,
         authorId: ustadzUser.id,
-        content: 'Silakan absen hadir subuh ini dan tulis satu poin tadabbur dari surah yang dibaca.',
+        blocks: [
+          {
+            type: 'markdown',
+            markdown: 'Silakan absen hadir subuh ini dan tulis satu poin tadabbur dari surah yang dibaca.',
+          },
+        ],
         createdAt: isoHoursAgo(6),
       },
-      {
+    }),
+    prisma.groupPost.create({
+      data: {
         groupId: publicGroup.id,
         authorId: demoUser.id,
-        content: 'Tadabbur saya hari ini: ritme pelan ternyata membantu ayat lebih “masuk”.',
+        blocks: [
+          {
+            type: 'markdown',
+            markdown: 'Tadabbur saya hari ini: ritme pelan ternyata membantu ayat lebih masuk.',
+          },
+          {
+            type: 'quranQuote',
+            surahNumber: 94,
+            ayahNumber: 6,
+            surahName: 'الشرح',
+            surahNameLatin: 'Ash-Sharh',
+            arabic: 'إِنَّ مَعَ الْعُسْرِ يُسْرًا',
+            translation: 'Sesungguhnya beserta kesulitan ada kemudahan.',
+          },
+        ],
         createdAt: isoHoursAgo(5),
       },
-      {
+    }),
+    prisma.groupPost.create({
+      data: {
         groupId: privateGroup.id,
         authorId: naqiyyahUser.id,
-        content: 'Minggu ini kita bahas fase dakwah sembunyi-sembunyi. Siapkan satu pertanyaan reflektif.',
+        blocks: [
+          {
+            type: 'markdown',
+            markdown: 'Minggu ini kita bahas fase dakwah sembunyi-sembunyi. Siapkan satu pertanyaan reflektif.',
+          },
+        ],
         createdAt: isoHoursAgo(10),
       },
+    }),
+  ])
+
+  await prisma.groupPostReaction.createMany({
+    data: [
+      { groupPostId: groupPost1.id, userId: demoUser.id, type: 'LIKE' },
+      { groupPostId: groupPost1.id, userId: hananUser.id, type: 'LIKE' },
+      { groupPostId: groupPost2.id, userId: ustadzUser.id, type: 'LIKE' },
+      { groupPostId: groupPost3.id, userId: demoUser.id, type: 'LIKE' },
     ],
+  })
+
+  const groupComment1 = await prisma.groupPostComment.create({
+    data: {
+      groupPostId: groupPost1.id,
+      authorId: demoUser.id,
+      content: 'Hadir, ustadz. Poin saya hari ini tentang pentingnya ritme bacaan.',
+      createdAt: isoHoursAgo(5),
+    },
+  })
+
+  await prisma.groupPostComment.create({
+    data: {
+      groupPostId: groupPost1.id,
+      authorId: ustadzUser.id,
+      parentId: groupComment1.id,
+      content: 'MasyaAllah, lanjutkan. Coba tulis juga bagian ayat yang paling terasa.',
+      createdAt: isoHoursAgo(4),
+    },
   })
 
   await prisma.groupMaterial.createMany({
@@ -396,7 +441,7 @@ async function main() {
         title: 'Ringkasan Tajwid Nun Mati',
         description: 'PDF singkat untuk pemanasan setoran pekan ini.',
         type: 'pdf',
-        resourceUrl: '#',
+        resourceUrl: 'https://example.com/materials/tajwid-nun-mati.pdf',
         createdAt: isoHoursAgo(48),
       },
       {
@@ -413,7 +458,7 @@ async function main() {
         title: 'Daftar Episode Sirah Pekan Ini',
         description: 'Kumpulan tautan audio dan catatan ringkas.',
         type: 'link',
-        resourceUrl: '#',
+        resourceUrl: 'https://example.com/materials/sirah-family-circle',
         createdAt: isoHoursAgo(18),
       },
     ],
@@ -450,8 +495,7 @@ async function main() {
       {
         taskId: task1.id,
         userId: demoUser.id,
-        content:
-          'Saya sudah setor ayat 1-3 dan mencatat bahwa waktu terasa sangat bernilai ketika target dibikin spesifik.',
+        content: 'Saya sudah setor ayat 1-3 dan mencatat bahwa waktu terasa sangat bernilai ketika target dibikin spesifik.',
         status: SubmissionStatus.REVISION,
         note: 'Bagus. Tolong perjelas bagian refleksi ayat kedua dan ulang makhraj pada akhir ayat.',
         submittedAt: isoHoursAgo(20),

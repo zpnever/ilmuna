@@ -187,19 +187,9 @@ export function LoginScreen() {
 
 export function RegisterScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-lg space-y-6">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold-500">Ilmuna</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-ink-900">Registrasi belum dibuka</h1>
-          <p className="text-sm leading-7 text-ink-500">
-            Pembuatan akun baru sedang dinonaktifkan. Jika Anda sudah punya akun, silakan masuk lewat halaman login.
-          </p>
-        </div>
-        <Button asChild className="w-full">
-          <Link to="/login">Ke halaman login</Link>
-        </Button>
-      </Card>
-    </div>
+    <AuthCard
+      title="Daftar dengan Google"
+      description="Pendaftaran akun baru tersedia melalui Google. Registrasi dengan email dan password tidak digunakan."
+    />
   )
 }
