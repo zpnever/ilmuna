@@ -16,4 +16,9 @@ export default defineConfig({
       allow: [resolve(__dirname, '..')],
     },
   },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+    allowedHosts: ['ilmuna.site', 'www.ilmuna.site'],
+  },
 })
