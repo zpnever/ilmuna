@@ -28,6 +28,7 @@ export function mapUser(
     | 'coverUrl'
     | 'interests'
     | 'isPrivate'
+    | 'themePreference'
     | 'notificationPreferences'
     | 'emailVerified'
     | 'isVerified'
@@ -47,6 +48,7 @@ export function mapUser(
     coverUrl: user.coverUrl,
     interests: user.interests as string[],
     isPrivate: user.isPrivate,
+    themePreference: user.themePreference === 'dark' ? 'dark' : 'light',
     notificationPreferences: user.notificationPreferences as {
       email: boolean
       push: boolean

@@ -20,6 +20,7 @@ export function SettingsScreen() {
   const [coverUrl, setCoverUrl] = useState('')
   const [interests, setInterests] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
+  const [themePreference, setThemePreference] = useState<'light' | 'dark'>('light')
   const [notifEmail, setNotifEmail] = useState(true)
   const [notifPush, setNotifPush] = useState(true)
   const [notifGroup, setNotifGroup] = useState(true)
@@ -37,6 +38,7 @@ export function SettingsScreen() {
     setCoverUrl(user.coverUrl)
     setInterests(user.interests.join(', '))
     setIsPrivate(user.isPrivate)
+    setThemePreference(user.themePreference)
     setNotifEmail(user.notificationPreferences.email)
     setNotifPush(user.notificationPreferences.push)
     setNotifGroup(user.notificationPreferences.group)
@@ -57,6 +59,7 @@ export function SettingsScreen() {
           .map((item) => item.trim())
           .filter(Boolean),
         isPrivate,
+        themePreference,
         notificationPreferences: {
           email: notifEmail,
           push: notifPush,
@@ -171,6 +174,14 @@ export function SettingsScreen() {
         <label className="flex items-center justify-between rounded-2xl bg-black/3 px-4 py-3">
           <span className="text-sm text-ink-700">Akun private</span>
           <input type="checkbox" checked={isPrivate} onChange={(event) => setIsPrivate(event.target.checked)} />
+        </label>
+        <label className="flex items-center justify-between rounded-2xl bg-black/3 px-4 py-3">
+          <span className="text-sm text-ink-700">Dark mode</span>
+          <input
+            type="checkbox"
+            checked={themePreference === 'dark'}
+            onChange={(event) => setThemePreference(event.target.checked ? 'dark' : 'light')}
+          />
         </label>
         <label className="flex items-center justify-between rounded-2xl bg-black/3 px-4 py-3">
           <span className="text-sm text-ink-700">Email notifikasi</span>

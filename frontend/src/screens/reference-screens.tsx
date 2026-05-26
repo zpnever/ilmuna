@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import { BookMarked, BookOpen, Library } from 'lucide-react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { ArrowLeft, BookMarked, BookOpen, Bookmark, Library } from 'lucide-react'
 
 import { Button, Card, EmptyState, SectionHeading, TabsContent, TabsList, TabsRoot, TabsTrigger, Textarea } from '@/components/ui'
+import { useAuth } from '@/context/auth-context'
+import { toggleHadithBookmark, updateHadithBookmarkNote } from '@/services/hadith-service'
+import { toggleQuranBookmark, updateQuranBookmarkNote } from '@/services/quran-service'
 import { getReferenceBookmarks } from '@/services/reference-service'
-import { updateHadithBookmarkNote } from '@/services/hadith-service'
-import { updateQuranBookmarkNote } from '@/services/quran-service'
+import type { HadithBookmark, QuranBookmark } from '@/types/domain'
 
 export function ReferencesHubScreen() {
   return (
@@ -58,6 +60,8 @@ export function ReferencesHubScreen() {
 }
 
 export function ReferencesBookmarksScreen() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const bookmarksQuery = useQuery({
     queryKey: ['reference-bookmarks'],
@@ -67,14 +71,60 @@ export function ReferencesBookmarksScreen() {
     mutationFn: ({ id, note }: { id: string; note: string }) => updateQuranBookmarkNote(id, note),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
+      await queryClient.invalidateQueries({ queryKey: ['quran-bookmarks', user?.id] })
     },
   })
   const hadithNoteMutation = useMutation({
     mutationFn: ({ id, note }: { id: string; note: string }) => updateHadithBookmarkNote(id, note),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
+      await queryClient.invalidateQueries({ queryKey: ['hadith-bookmarks', user?.id] })
     },
   })
+  const removeQuranMutation = useMutation({
+    mutationFn: (bookmark: QuranBookmark) =>
+      toggleQuranBookmark(
+        user!.id,
+        {
+          surahNumber: bookmark.surahNumber,
+          ayahNumber: bookmark.ayahNumber,
+          surahName: bookmark.surahName,
+          arabicText: bookmark.arabicText,
+          translation: bookmark.translation,
+        },
+        bookmark.note,
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] }),
+        queryClient.invalidateQueries({ queryKey: ['quran-bookmarks', user?.id] }),
+      ])
+    },
+  })
+  const removeHadithMutation = useMutation({
+    mutationFn: (bookmark: HadithBookmark) =>
+      toggleHadithBookmark(
+        user!.id,
+        {
+          bookSlug: bookmark.bookSlug,
+          bookName: bookmark.bookName,
+          number: bookmark.hadithNumber,
+          arabic: bookmark.arabicText,
+          translation: bookmark.translation,
+        },
+        bookmark.note,
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] }),
+        queryClient.invalidateQueries({ queryKey: ['hadith-bookmarks', user?.id] }),
+      ])
+    },
+  })
+
+  if (!user) {
+    return null
+  }
 
   return (
     <div className="space-y-6">
@@ -82,6 +132,12 @@ export function ReferencesBookmarksScreen() {
         eyebrow="Bookmark"
         title="Semua bookmark referensi"
         description="Ayat dan hadith yang Anda simpan ditampilkan dalam satu tempat."
+        action={
+          <Button variant="secondary" onClick={() => void navigate({ to: '/references' })}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Kembali
+          </Button>
+        }
       />
       <TabsRoot defaultValue="quran">
         <TabsList>
@@ -92,9 +148,15 @@ export function ReferencesBookmarksScreen() {
           {bookmarksQuery.data?.quran.length ? (
             bookmarksQuery.data.quran.map((bookmark) => (
               <Card key={bookmark.id} className="space-y-4">
-                <p className="text-sm font-semibold text-ink-900">
-                  {bookmark.surahName} • Ayat {bookmark.ayahNumber}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-ink-900">
+                    {bookmark.surahName} • Ayat {bookmark.ayahNumber}
+                  </p>
+                  <Button size="sm" variant="secondary" onClick={() => removeQuranMutation.mutate(bookmark)}>
+                    <Bookmark className="mr-2 h-4 w-4" />
+                    Hapus bookmark
+                  </Button>
+                </div>
                 <p dir="rtl" className="text-right text-2xl leading-loose text-ink-900">
                   {bookmark.arabicText}
                 </p>
@@ -115,9 +177,15 @@ export function ReferencesBookmarksScreen() {
           {bookmarksQuery.data?.hadith.length ? (
             bookmarksQuery.data.hadith.map((bookmark) => (
               <Card key={bookmark.id} className="space-y-4">
-                <p className="text-sm font-semibold text-ink-900">
-                  {bookmark.bookName} • Hadith {bookmark.hadithNumber}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-ink-900">
+                    {bookmark.bookName} • Hadith {bookmark.hadithNumber}
+                  </p>
+                  <Button size="sm" variant="secondary" onClick={() => removeHadithMutation.mutate(bookmark)}>
+                    <Bookmark className="mr-2 h-4 w-4" />
+                    Hapus bookmark
+                  </Button>
+                </div>
                 <p dir="rtl" className="text-right text-2xl leading-loose text-ink-900">
                   {bookmark.arabicText}
                 </p>

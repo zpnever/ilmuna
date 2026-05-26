@@ -1,4 +1,5 @@
 export type UserRole = 'member' | 'ustadz' | 'admin'
+export type ThemePreference = 'light' | 'dark'
 
 export interface User {
   id: string
@@ -13,6 +14,7 @@ export interface User {
   coverUrl: string
   interests: string[]
   isPrivate: boolean
+  themePreference: ThemePreference
   notificationPreferences: {
     email: boolean
     push: boolean

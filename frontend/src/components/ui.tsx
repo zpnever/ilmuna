@@ -21,11 +21,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-ink-900 text-white shadow-lg shadow-black/10 hover:-translate-y-0.5 hover:bg-black',
-        secondary: 'bg-white text-ink-900 ring-1 ring-black/10 hover:bg-ink-50',
+        primary: 'bg-[var(--button-primary-bg)] text-[var(--button-primary-text)] shadow-lg shadow-black/10 hover:-translate-y-0.5 hover:bg-[var(--button-primary-hover-bg)]',
+        secondary: 'bg-[var(--surface-elevated)] text-[var(--foreground)] ring-1 ring-[color:var(--border-subtle)] hover:bg-[var(--surface-muted)]',
         ghost: 'text-ink-700 hover:bg-black/5',
         gold: 'bg-gold-400 text-black hover:bg-gold-300',
-        danger: 'bg-red-600 text-white hover:bg-red-500',
+        danger: 'bg-[#7f1d1d] text-white hover:bg-[#991b1b]',
       },
       size: {
         sm: 'h-9 px-3.5',
@@ -56,7 +56,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        'flex h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none placeholder:text-ink-400 focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20',
+        'flex h-11 w-full rounded-2xl border border-[color:var(--border-subtle)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--foreground)] outline-none placeholder:text-ink-400 focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20',
         className,
       )}
       {...props}
@@ -68,7 +68,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        'flex min-h-28 w-full rounded-3xl border border-black/10 bg-white px-4 py-3 text-sm outline-none placeholder:text-ink-400 focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20',
+        'flex min-h-28 w-full rounded-3xl border border-[color:var(--border-subtle)] bg-[var(--surface-elevated)] px-4 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-ink-400 focus:border-gold-400 focus:ring-2 focus:ring-gold-400/20',
         className,
       )}
       {...props}
@@ -80,7 +80,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        'rounded-[var(--radius-card)] border border-black/8 bg-white/90 p-5 shadow-[0_16px_60px_-30px_rgba(0,0,0,0.25)] backdrop-blur',
+        'rounded-[var(--radius-card)] border border-[color:var(--border-soft)] bg-[var(--surface-card)] p-5 shadow-[0_16px_60px_-30px_rgba(0,0,0,0.25)] backdrop-blur',
         className,
       )}
       {...props}
@@ -138,7 +138,7 @@ export function TabsRoot(props: TabsPrimitive.TabsProps) {
 export function TabsList({ className, ...props }: TabsPrimitive.TabsListProps) {
   return (
     <TabsPrimitive.List
-      className={cn('inline-flex rounded-full bg-black/5 p-1 text-sm', className)}
+      className={cn('inline-flex rounded-full bg-[var(--surface-muted)] p-1 text-sm', className)}
       {...props}
     />
   )
@@ -148,7 +148,7 @@ export function TabsTrigger({ className, ...props }: TabsPrimitive.TabsTriggerPr
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        'rounded-full px-4 py-2 font-medium text-ink-500 transition data-[state=active]:bg-white data-[state=active]:text-ink-900 data-[state=active]:shadow-sm',
+        'rounded-full px-4 py-2 font-medium text-ink-500 transition data-[state=active]:bg-[var(--surface-elevated)] data-[state=active]:text-ink-900 data-[state=active]:shadow-sm',
         className,
       )}
       {...props}
@@ -169,20 +169,28 @@ export const DialogTrigger = DialogPrimitive.Trigger
 export function DialogContent({
   children,
   className,
-}: DialogPrimitive.DialogContentProps & { children: ReactNode }) {
+  overlayClassName,
+  hideCloseButton = false,
+}: DialogPrimitive.DialogContentProps & {
+  children: ReactNode
+  overlayClassName?: string
+  hideCloseButton?: boolean
+}) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/35 backdrop-blur-sm" />
+      <DialogPrimitive.Overlay className={cn('fixed inset-0 z-50 bg-black/35 backdrop-blur-sm', overlayClassName)} />
       <DialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[min(92vw,780px)] -translate-x-1/2 -translate-y-1/2 rounded-[2rem] border border-black/10 bg-white p-6 shadow-2xl outline-none',
+          'fixed left-1/2 top-1/2 z-50 w-[min(92vw,780px)] -translate-x-1/2 -translate-y-1/2 rounded-[2rem] border border-[color:var(--border-subtle)] bg-[var(--surface-card)] p-6 shadow-2xl outline-none',
           className,
         )}
       >
         {children}
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-2 text-ink-500 transition hover:bg-black/5 hover:text-ink-900">
-          <X className="h-4 w-4" />
-        </DialogPrimitive.Close>
+        {!hideCloseButton ? (
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-2 text-ink-500 transition hover:bg-black/5 hover:text-ink-900">
+            <X className="h-4 w-4" />
+          </DialogPrimitive.Close>
+        ) : null}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   )
@@ -206,7 +214,7 @@ export function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         sideOffset={10}
         className={cn(
-          'z-50 min-w-64 rounded-[1.75rem] border border-black/10 bg-white p-2 shadow-2xl outline-none',
+          'z-50 min-w-64 rounded-[1.75rem] border border-[color:var(--border-subtle)] bg-[var(--surface-card)] p-2 shadow-2xl outline-none',
           className,
         )}
         {...props}

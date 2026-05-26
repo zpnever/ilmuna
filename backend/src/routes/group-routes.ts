@@ -460,8 +460,18 @@ groupRouter.post('/groups/:slug/members/:memberId/role', requireAuth, async (req
     if (!manager) {
       throw new HttpError(403, 'Hanya moderator yang bisa mengganti role anggota.')
     }
-    const member = await prisma.groupMember.update({
+    const targetMember = await prisma.groupMember.findUniqueOrThrow({
       where: { id: memberId },
+      select: { id: true, groupId: true, userId: true },
+    })
+    if (targetMember.groupId !== group.id) {
+      throw new HttpError(404, 'Anggota grup tidak ditemukan.')
+    }
+    if (targetMember.userId === req.auth!.userId) {
+      throw new HttpError(400, 'Anda tidak bisa mengubah role akun Anda sendiri.')
+    }
+    const member = await prisma.groupMember.update({
+      where: { id: targetMember.id },
       data: { groupRole: input.role.toUpperCase() as GroupRole },
       include: { user: true },
     })

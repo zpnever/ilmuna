@@ -72,10 +72,14 @@ function GroupTopNav({ slug, active }: { slug: string; active: 'forum' | 'materi
 function GroupImageLightbox({ image, onClose }: { image: string | null; onClose: () => void }) {
   return (
     <Dialog open={Boolean(image)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-[min(96vw,1080px)] bg-black/95 p-4">
-        <div className="max-h-[80vh] overflow-auto rounded-[1.5rem] bg-black/80 p-4">
-          {image ? <img src={image} alt="Preview" className="mx-auto max-h-[72vh] max-w-full rounded-[1.5rem] object-contain" /> : null}
-        </div>
+      <DialogContent
+        hideCloseButton
+        overlayClassName="bg-black/92 backdrop-blur-none"
+        className="inset-0 left-0 top-0 h-screen w-screen translate-x-0 translate-y-0 rounded-none border-none bg-transparent p-0 shadow-none"
+      >
+        <button type="button" className="flex h-full w-full items-center justify-center p-0" onClick={onClose}>
+          {image ? <img src={image} alt="Preview" className="h-screen w-screen object-contain" /> : null}
+        </button>
       </DialogContent>
     </Dialog>
   )
@@ -525,6 +529,7 @@ export function GroupDetailScreen() {
 export function GroupMembersScreen() {
   const { user } = useAuth()
   const { slug } = useParams({ from: '/groups/$slug/members' })
+  const queryClient = useQueryClient()
   const detailQuery = useQuery({
     queryKey: ['group', slug],
     queryFn: () => getGroupDetail(slug),
@@ -535,22 +540,94 @@ export function GroupMembersScreen() {
     queryFn: () => getGroupMembers(slug),
     enabled: Boolean(user),
   })
+  const requestsQuery = useQuery({
+    queryKey: ['group-requests', slug],
+    queryFn: () => getGroupJoinRequests(slug),
+    enabled: canManage(detailQuery.data?.group.viewerRole),
+  })
+  const reviewJoinMutation = useMutation({
+    mutationFn: ({ requestId, status }: { requestId: string; status: 'approved' | 'rejected' }) =>
+      reviewJoinRequest(slug, requestId, status),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['group-requests', slug] })
+      await queryClient.invalidateQueries({ queryKey: ['group', slug] })
+      await queryClient.invalidateQueries({ queryKey: ['group-members', slug] })
+    },
+  })
+  const roleMutation = useMutation({
+    mutationFn: ({ memberId, role }: { memberId: string; role: 'moderator' | 'admin' | 'ustadz' | 'anggota' }) =>
+      updateGroupMemberRole(slug, memberId, role),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['group-members', slug] })
+      await queryClient.invalidateQueries({ queryKey: ['group', slug] })
+    },
+  })
+  const kickMutation = useMutation({
+    mutationFn: (memberId: string) => kickGroupMember(slug, memberId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['group-members', slug] })
+      await queryClient.invalidateQueries({ queryKey: ['group', slug] })
+    },
+  })
 
   if (!user || !detailQuery.data) {
     return null
   }
 
+  const { group } = detailQuery.data
+
   return (
     <div className="space-y-6">
       <SectionHeading eyebrow="Anggota" title={detailQuery.data.group.name} action={<GroupTopNav slug={slug} active="members" />} />
+      {canManage(group.viewerRole) ? (
+        <Card className="space-y-4">
+          <h2 className="text-xl font-semibold text-ink-900">Permintaan bergabung</h2>
+          {requestsQuery.data?.length ? (
+            requestsQuery.data.map((request) => (
+              <div key={request.id} className="rounded-3xl bg-black/3 p-4">
+                <p className="font-semibold text-ink-900">{request.user.name}</p>
+                <p className="text-sm text-ink-500">@{request.user.username}</p>
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" onClick={() => reviewJoinMutation.mutate({ requestId: request.id, status: 'approved' })}>
+                    Setujui
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => reviewJoinMutation.mutate({ requestId: request.id, status: 'rejected' })}>
+                    Tolak
+                  </Button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-ink-500">Belum ada permintaan bergabung.</p>
+          )}
+        </Card>
+      ) : null}
       <div className="space-y-4">
         {membersQuery.data?.map((member) => (
-          <Card key={member.id} className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-ink-900">{member.user?.name ?? 'Anggota grup'}</p>
-              <p className="text-sm text-ink-500">@{member.user?.username ?? '-'}</p>
+          <Card key={member.id} className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-ink-900">{member.user?.name ?? 'Anggota grup'}</p>
+                <p className="text-sm text-ink-500">@{member.user?.username ?? '-'}</p>
+              </div>
+              <Badge variant="gold">{member.groupRole}</Badge>
             </div>
-            <Badge variant="gold">{member.groupRole}</Badge>
+            {group.viewerRole === 'moderator' && member.userId !== user.id ? (
+              <div className="flex flex-wrap gap-2">
+                {(['moderator', 'admin', 'ustadz', 'anggota'] as const).map((role) => (
+                  <Button key={role} size="sm" variant="secondary" onClick={() => roleMutation.mutate({ memberId: member.id, role })}>
+                    {role}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            {canManage(group.viewerRole) && member.userId !== user.id ? (
+              <div>
+                <Button size="sm" variant="danger" onClick={() => kickMutation.mutate(member.id)}>
+                  Kick anggota
+                </Button>
+              </div>
+            ) : null}
           </Card>
         ))}
       </div>
@@ -823,46 +900,11 @@ export function GroupSettingsScreen() {
     queryFn: () => getGroupDetail(slug),
     enabled: Boolean(user),
   })
-  const membersQuery = useQuery({
-    queryKey: ['group-members', slug],
-    queryFn: () => getGroupMembers(slug),
-    enabled: Boolean(user),
-  })
-  const requestsQuery = useQuery({
-    queryKey: ['group-requests', slug],
-    queryFn: () => getGroupJoinRequests(slug),
-    enabled: canManage(detailQuery.data?.group.viewerRole),
-  })
-
   const leaveMutation = useMutation({
     mutationFn: () => leaveGroup(slug),
     onSuccess: async () => {
       toast.success('Anda keluar dari grup.')
       await navigate({ to: '/groups' })
-    },
-  })
-  const reviewJoinMutation = useMutation({
-    mutationFn: ({ requestId, status }: { requestId: string; status: 'approved' | 'rejected' }) =>
-      reviewJoinRequest(slug, requestId, status),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['group-requests', slug] })
-      await queryClient.invalidateQueries({ queryKey: ['group', slug] })
-      await queryClient.invalidateQueries({ queryKey: ['group-members', slug] })
-    },
-  })
-  const roleMutation = useMutation({
-    mutationFn: ({ memberId, role }: { memberId: string; role: 'moderator' | 'admin' | 'ustadz' | 'anggota' }) =>
-      updateGroupMemberRole(slug, memberId, role),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['group-members', slug] })
-      await queryClient.invalidateQueries({ queryKey: ['group', slug] })
-    },
-  })
-  const kickMutation = useMutation({
-    mutationFn: (memberId: string) => kickGroupMember(slug, memberId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['group-members', slug] })
-      await queryClient.invalidateQueries({ queryKey: ['group', slug] })
     },
   })
   const updateMutation = useMutation({
@@ -924,63 +966,6 @@ export function GroupSettingsScreen() {
               Simpan perubahan
             </Button>
           </div>
-        </Card>
-      ) : null}
-
-      {canManage(group.viewerRole) ? (
-        <Card className="space-y-4">
-          <h2 className="text-xl font-semibold text-ink-900">Permintaan bergabung</h2>
-          {requestsQuery.data?.length ? (
-            requestsQuery.data.map((request) => (
-              <div key={request.id} className="rounded-3xl bg-black/3 p-4">
-                <p className="font-semibold text-ink-900">{request.user.name}</p>
-                <p className="text-sm text-ink-500">@{request.user.username}</p>
-                <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={() => reviewJoinMutation.mutate({ requestId: request.id, status: 'approved' })}>
-                    Setujui
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={() => reviewJoinMutation.mutate({ requestId: request.id, status: 'rejected' })}>
-                    Tolak
-                  </Button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-ink-500">Belum ada permintaan bergabung.</p>
-          )}
-        </Card>
-      ) : null}
-
-      {membersQuery.data?.length ? (
-        <Card className="space-y-4">
-          <h2 className="text-xl font-semibold text-ink-900">Manajemen anggota</h2>
-          {membersQuery.data.map((member) => (
-            <div key={member.id} className="rounded-3xl bg-black/3 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-ink-900">{member.user?.name ?? 'Anggota grup'}</p>
-                  <p className="text-sm text-ink-500">@{member.user?.username ?? '-'}</p>
-                </div>
-                <Badge variant="gold">{member.groupRole}</Badge>
-              </div>
-              {group.viewerRole === 'moderator' ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(['moderator', 'admin', 'ustadz', 'anggota'] as const).map((role) => (
-                    <Button key={role} size="sm" variant="secondary" onClick={() => roleMutation.mutate({ memberId: member.id, role })}>
-                      {role}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-              {canManage(group.viewerRole) && member.userId !== user.id ? (
-                <div className="mt-3">
-                  <Button size="sm" variant="danger" onClick={() => kickMutation.mutate(member.id)}>
-                    Kick anggota
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ))}
         </Card>
       ) : null}
 

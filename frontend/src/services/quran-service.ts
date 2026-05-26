@@ -1,6 +1,16 @@
 import { apiRequest } from '@/lib/api'
 import type { Ayah, QuranBookmark, SurahDetail, SurahSummary } from '@/types/domain'
 
+type QuranBookmarkSource = Pick<
+  Ayah,
+  'surahNumber' | 'ayahNumber' | 'translation'
+> & {
+  surahName?: string
+  surahNameLatin?: string
+  arabic?: string
+  arabicText?: string
+}
+
 export async function getSurahList() {
   return apiRequest<SurahSummary[]>('/references/quran/surahs', undefined, false)
 }
@@ -18,14 +28,14 @@ export async function searchAyah(query: string, surahNumber?: number) {
   return apiRequest<Array<Ayah | SurahSummary>>(`/references/quran/search?${params.toString()}`, undefined, false)
 }
 
-export async function toggleQuranBookmark(_userId: string, ayah: Ayah, existingNote = '') {
+export async function toggleQuranBookmark(_userId: string, ayah: QuranBookmarkSource, existingNote = '') {
   return apiRequest<QuranBookmark | null>('/bookmarks/quran/toggle', {
     method: 'POST',
     body: JSON.stringify({
       surahNumber: ayah.surahNumber,
       ayahNumber: ayah.ayahNumber,
-      surahName: ayah.surahNameLatin,
-      arabicText: ayah.arabic,
+      surahName: ayah.surahNameLatin ?? ayah.surahName ?? '',
+      arabicText: ayah.arabic ?? ayah.arabicText ?? '',
       translation: ayah.translation,
       note: existingNote,
     }),

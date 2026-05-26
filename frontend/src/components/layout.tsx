@@ -62,6 +62,8 @@ export function AppFrame({ children }: { children?: ReactNode }) {
   }
 
   const showAdmin = user.role === 'admin'
+  const profileMenuActive =
+    location.pathname.startsWith('/profile') || location.pathname.startsWith('/settings')
 
   async function confirmLogout() {
     await logoutUser()
@@ -178,10 +180,7 @@ export function AppFrame({ children }: { children?: ReactNode }) {
 
       <nav className="fixed inset-x-4 bottom-4 z-40 rounded-[2rem] border border-black/10 bg-white/95 p-2 shadow-2xl backdrop-blur lg:hidden">
         <div className="grid grid-cols-5 gap-1">
-          {[
-            ...primaryNavItems,
-            { to: `/profile/${user.username}`, label: 'Profile', icon: UserCircle2 },
-          ].map((item) => {
+          {primaryNavItems.map((item) => {
             const Icon = item.icon
             const active = location.pathname.startsWith(item.to)
             return (
@@ -198,6 +197,17 @@ export function AppFrame({ children }: { children?: ReactNode }) {
               </Link>
             )
           })}
+          <ProfileMenu
+            avatarUrl={user.avatarUrl}
+            fallback={initials(user.name)}
+            name={user.name}
+            username={user.username}
+            onOpenProfile={() => void navigate({ to: '/profile/$username', params: { username: user.username } })}
+            onOpenSettings={() => void navigate({ to: '/settings' })}
+            onLogout={() => setLogoutOpen(true)}
+            compact
+            active={profileMenuActive}
+          />
         </div>
       </nav>
 
@@ -229,6 +239,8 @@ function ProfileMenu({
   onOpenProfile,
   onOpenSettings,
   onLogout,
+  compact = false,
+  active = false,
 }: {
   avatarUrl: string
   fallback: string
@@ -237,7 +249,47 @@ function ProfileMenu({
   onOpenProfile: () => void
   onOpenSettings: () => void
   onLogout: () => void
+  compact?: boolean
+  active?: boolean
 }) {
+  if (compact) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-medium transition',
+              active ? 'bg-black text-white' : 'text-ink-500',
+            )}
+          >
+            <UserCircle2 className="h-4 w-4" />
+            Akun
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="mb-3">
+          <DropdownMenuItem onSelect={onOpenProfile} className="p-0">
+            <button type="button" className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left">
+              <Avatar src={avatarUrl} fallback={fallback} className="h-12 w-12" />
+              <div>
+                <p className="text-sm font-semibold text-ink-900">{name}</p>
+                <p className="text-xs text-ink-500">@{username}</p>
+              </div>
+            </button>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenSettings}>
+            <Settings className="mr-3 h-4 w-4" />
+            Pengaturan
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onLogout} className="text-[#991b1b]">
+            <LogOut className="mr-3 h-4 w-4" />
+            Logout
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -266,7 +318,7 @@ function ProfileMenu({
           <Settings className="mr-3 h-4 w-4" />
           Pengaturan
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onLogout} className="text-red-600">
+        <DropdownMenuItem onSelect={onLogout} className="text-[#991b1b]">
           <LogOut className="mr-3 h-4 w-4" />
           Logout
         </DropdownMenuItem>

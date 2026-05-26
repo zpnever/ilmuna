@@ -12,6 +12,7 @@ import {
   toggleHadithBookmark,
   updateHadithBookmarkNote,
 } from '@/services/hadith-service'
+import type { HadithBookmark, ReferenceBookmarks } from '@/types/domain'
 
 function useInfiniteLoadMore(
   enabled: boolean,
@@ -35,6 +36,18 @@ function useInfiniteLoadMore(
   }, [enabled, onLoad])
 
   return ref
+}
+
+function syncHadithBookmarks(
+  current: HadithBookmark[] | undefined,
+  nextBookmark: HadithBookmark | null,
+  entry: { bookSlug: string; number: number },
+) {
+  const items = current ?? []
+  const filtered = items.filter(
+    (bookmark) => !(bookmark.bookSlug === entry.bookSlug && bookmark.hadithNumber === entry.number),
+  )
+  return nextBookmark ? [nextBookmark, ...filtered] : filtered
 }
 
 export function HadithBooksScreen() {
@@ -101,6 +114,11 @@ export function HadithBookScreen() {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.offset + lastPage.items.length : undefined),
     enabled: Boolean(user),
   })
+  const bookmarksQuery = useQuery({
+    queryKey: ['hadith-bookmarks', user?.id],
+    queryFn: () => getHadithBookmarks(user!.id),
+    enabled: Boolean(user?.id),
+  })
 
   const allItems = useMemo(
     () => entriesQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -112,9 +130,24 @@ export function HadithBookScreen() {
   )
 
   const bookmarkMutation = useMutation({
-    mutationFn: (entryIndex: number) => toggleHadithBookmark(user!.id, allItems[entryIndex]),
-    onSuccess: async () => {
+    mutationFn: (entryIndex: number) => {
+      const entry = allItems[entryIndex]
+      const activeBookmark = bookmarksQuery.data?.find(
+        (bookmark) => bookmark.bookSlug === entry.bookSlug && bookmark.hadithNumber === entry.number,
+      )
+      return toggleHadithBookmark(user!.id, entry, activeBookmark?.note ?? '')
+    },
+    onSuccess: async (nextBookmark, entryIndex) => {
+      const entry = allItems[entryIndex]
+      queryClient.setQueryData(['hadith-bookmarks', user?.id], (current: HadithBookmark[] | undefined) =>
+        syncHadithBookmarks(current, nextBookmark, entry),
+      )
+      queryClient.setQueryData(['reference-bookmarks'], (current: ReferenceBookmarks | undefined) => ({
+        ...(current ?? { quran: [], hadith: [] }),
+        hadith: syncHadithBookmarks(current?.hadith, nextBookmark, entry),
+      }))
       await queryClient.invalidateQueries({ queryKey: ['hadith-bookmarks', user?.id] })
+      await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
     },
   })
 
@@ -147,26 +180,31 @@ export function HadithBookScreen() {
         />
       </div>
       <div className="space-y-4">
-        {allItems.map((entry, index) => (
-          <Card key={`${entry.bookSlug}-${entry.number}`} className="space-y-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <Badge variant="gold">Hadith {entry.number}</Badge>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="mt-1 shrink-0"
-                onClick={() => bookmarkMutation.mutate(index)}
-              >
-                <Bookmark className="mr-2 h-4 w-4" />
-                Bookmark
-              </Button>
-            </div>
-            <p dir="rtl" className="text-right text-[28px] leading-loose text-ink-900">
-              {entry.arabic}
-            </p>
-            <p className="text-sm leading-8 text-ink-600">{entry.translation}</p>
-          </Card>
-        ))}
+        {allItems.map((entry, index) => {
+          const activeBookmark = bookmarksQuery.data?.find(
+            (bookmark) => bookmark.bookSlug === entry.bookSlug && bookmark.hadithNumber === entry.number,
+          )
+          return (
+            <Card key={`${entry.bookSlug}-${entry.number}`} className="space-y-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <Badge variant="gold">Hadith {entry.number}</Badge>
+                <Button
+                  size="sm"
+                  variant={activeBookmark ? 'gold' : 'secondary'}
+                  className="mt-1 shrink-0"
+                  onClick={() => bookmarkMutation.mutate(index)}
+                >
+                  <Bookmark className="mr-2 h-4 w-4" />
+                  {activeBookmark ? 'Hapus bookmark' : 'Bookmark'}
+                </Button>
+              </div>
+              <p dir="rtl" className="text-right text-[28px] leading-loose text-ink-900">
+                {entry.arabic}
+              </p>
+              <p className="text-sm leading-8 text-ink-600">{entry.translation}</p>
+            </Card>
+          )
+        })}
         <div ref={loadMoreRef} />
         {entriesQuery.isFetchingNextPage ? (
           <Card className="text-center text-sm text-ink-500">Memuat hadith berikutnya...</Card>
@@ -178,6 +216,7 @@ export function HadithBookScreen() {
 
 export function HadithBookmarksScreen() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const bookmarksQuery = useQuery({
     queryKey: ['hadith-bookmarks', user?.id],
@@ -188,6 +227,25 @@ export function HadithBookmarksScreen() {
     mutationFn: ({ id, note }: { id: string; note: string }) => updateHadithBookmarkNote(id, note),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['hadith-bookmarks', user?.id] })
+      await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
+    },
+  })
+  const removeMutation = useMutation({
+    mutationFn: (bookmark: HadithBookmark) =>
+      toggleHadithBookmark(
+        user!.id,
+        {
+          bookSlug: bookmark.bookSlug,
+          bookName: bookmark.bookName,
+          number: bookmark.hadithNumber,
+          arabic: bookmark.arabicText,
+          translation: bookmark.translation,
+        },
+        bookmark.note,
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['hadith-bookmarks', user?.id] })
+      await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
     },
   })
 
@@ -197,15 +255,28 @@ export function HadithBookmarksScreen() {
 
   return (
     <div className="space-y-6">
-      <SectionHeading eyebrow="Bookmark" title="Hadith yang Anda simpan" />
+      <SectionHeading
+        eyebrow="Bookmark"
+        title="Hadith yang Anda simpan"
+        action={
+          <Button variant="secondary" onClick={() => void navigate({ to: '/references' })}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Kembali
+          </Button>
+        }
+      />
       {bookmarksQuery.data?.length ? (
         <div className="space-y-4">
           {bookmarksQuery.data.map((bookmark) => (
             <Card key={bookmark.id} className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <Badge variant="gold">
                   {bookmark.bookName} • {bookmark.hadithNumber}
                 </Badge>
+                <Button size="sm" variant="secondary" onClick={() => removeMutation.mutate(bookmark)}>
+                  <Bookmark className="mr-2 h-4 w-4" />
+                  Hapus bookmark
+                </Button>
               </div>
               <p dir="rtl" className="text-right text-2xl leading-loose text-ink-900">
                 {bookmark.arabicText}

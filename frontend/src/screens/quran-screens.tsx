@@ -12,7 +12,18 @@ import {
   toggleQuranBookmark,
   updateQuranBookmarkNote,
 } from '@/services/quran-service'
-import type { Ayah } from '@/types/domain'
+import type { Ayah, QuranBookmark, ReferenceBookmarks } from '@/types/domain'
+
+function syncQuranBookmarks(current: QuranBookmark[] | undefined, nextBookmark: QuranBookmark | null, ayah: {
+  surahNumber: number
+  ayahNumber: number
+}) {
+  const items = current ?? []
+  const filtered = items.filter(
+    (bookmark) => !(bookmark.surahNumber === ayah.surahNumber && bookmark.ayahNumber === ayah.ayahNumber),
+  )
+  return nextBookmark ? [nextBookmark, ...filtered] : filtered
+}
 
 export function QuranListScreen() {
   const listQuery = useQuery({
@@ -78,12 +89,29 @@ export function QuranListScreen() {
   )
 }
 
-function AyahCard({ ayah, currentUserId }: { ayah: Ayah; currentUserId: string }) {
+function AyahCard({
+  ayah,
+  currentUserId,
+  activeBookmark,
+}: {
+  ayah: Ayah
+  currentUserId: string
+  activeBookmark?: QuranBookmark
+}) {
   const queryClient = useQueryClient()
+  const isBookmarked = Boolean(activeBookmark)
   const bookmarkMutation = useMutation({
-    mutationFn: () => toggleQuranBookmark(currentUserId, ayah),
-    onSuccess: async () => {
+    mutationFn: () => toggleQuranBookmark(currentUserId, ayah, activeBookmark?.note ?? ''),
+    onSuccess: async (nextBookmark) => {
+      queryClient.setQueryData(['quran-bookmarks', currentUserId], (current: QuranBookmark[] | undefined) =>
+        syncQuranBookmarks(current, nextBookmark, ayah),
+      )
+      queryClient.setQueryData(['reference-bookmarks'], (current: ReferenceBookmarks | undefined) => ({
+        ...(current ?? { quran: [], hadith: [] }),
+        quran: syncQuranBookmarks(current?.quran, nextBookmark, ayah),
+      }))
       await queryClient.invalidateQueries({ queryKey: ['quran-bookmarks', currentUserId] })
+      await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
     },
   })
 
@@ -93,12 +121,12 @@ function AyahCard({ ayah, currentUserId }: { ayah: Ayah; currentUserId: string }
         <Badge variant="gold">Ayat {ayah.ayahNumber}</Badge>
         <Button
           size="sm"
-          variant="secondary"
+          variant={isBookmarked ? 'gold' : 'secondary'}
           className="mt-1 shrink-0"
           onClick={() => bookmarkMutation.mutate()}
         >
           <Bookmark className="mr-2 h-4 w-4" />
-          Bookmark
+          {isBookmarked ? 'Hapus bookmark' : 'Bookmark'}
         </Button>
       </div>
       <p dir="rtl" className="pr-2 text-right text-[28px] leading-loose text-ink-900">
@@ -118,6 +146,11 @@ export function QuranSurahScreen() {
   const detailQuery = useQuery({
     queryKey: ['quran', 'detail', number],
     queryFn: () => getSurahDetail(number),
+  })
+  const bookmarksQuery = useQuery({
+    queryKey: ['quran-bookmarks', user?.id],
+    queryFn: () => getQuranBookmarks(user!.id),
+    enabled: Boolean(user?.id),
   })
 
   if (!user || !detailQuery.data) {
@@ -181,7 +214,15 @@ export function QuranSurahScreen() {
       </Card>
       <div className="space-y-4">
         {visibleAyahs.map((ayah) => (
-          <AyahCard key={ayah.ayahNumber} ayah={ayah} currentUserId={user.id} />
+          <AyahCard
+            key={ayah.ayahNumber}
+            ayah={ayah}
+            currentUserId={user.id}
+            activeBookmark={bookmarksQuery.data?.find(
+              (bookmark) =>
+                bookmark.surahNumber === ayah.surahNumber && bookmark.ayahNumber === ayah.ayahNumber,
+            )}
+          />
         ))}
       </div>
     </div>
@@ -190,6 +231,7 @@ export function QuranSurahScreen() {
 
 export function QuranBookmarksScreen() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const bookmarksQuery = useQuery({
     queryKey: ['quran-bookmarks', user?.id],
@@ -200,6 +242,25 @@ export function QuranBookmarksScreen() {
     mutationFn: ({ id, note }: { id: string; note: string }) => updateQuranBookmarkNote(id, note),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['quran-bookmarks', user?.id] })
+      await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
+    },
+  })
+  const removeMutation = useMutation({
+    mutationFn: (bookmark: QuranBookmark) =>
+      toggleQuranBookmark(
+        user!.id,
+        {
+          surahNumber: bookmark.surahNumber,
+          ayahNumber: bookmark.ayahNumber,
+          surahName: bookmark.surahName,
+          arabicText: bookmark.arabicText,
+          translation: bookmark.translation,
+        },
+        bookmark.note,
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['quran-bookmarks', user?.id] })
+      await queryClient.invalidateQueries({ queryKey: ['reference-bookmarks'] })
     },
   })
 
@@ -209,14 +270,29 @@ export function QuranBookmarksScreen() {
 
   return (
     <div className="space-y-6">
-      <SectionHeading eyebrow="Bookmark" title="Ayat yang Anda simpan" />
+      <SectionHeading
+        eyebrow="Bookmark"
+        title="Ayat yang Anda simpan"
+        action={
+          <Button variant="secondary" onClick={() => void navigate({ to: '/references' })}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Kembali
+          </Button>
+        }
+      />
       {bookmarksQuery.data?.length ? (
         <div className="space-y-4">
           {bookmarksQuery.data.map((bookmark) => (
             <Card key={bookmark.id} className="space-y-4">
-              <Badge variant="gold">
-                {bookmark.surahName} • {bookmark.ayahNumber}
-              </Badge>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Badge variant="gold">
+                  {bookmark.surahName} • {bookmark.ayahNumber}
+                </Badge>
+                <Button size="sm" variant="secondary" onClick={() => removeMutation.mutate(bookmark)}>
+                  <Bookmark className="mr-2 h-4 w-4" />
+                  Hapus bookmark
+                </Button>
+              </div>
               <p dir="rtl" className="text-right text-2xl leading-loose text-ink-900">
                 {bookmark.arabicText}
               </p>

@@ -13,7 +13,7 @@ import {
   loginWithGoogleCredential,
   logout,
 } from '@/services/auth-service'
-import type { SessionUser } from '@/types/domain'
+import type { SessionUser, ThemePreference } from '@/types/domain'
 
 interface AuthContextValue {
   user: SessionUser | null
@@ -26,6 +26,10 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+
+function applyThemePreference(themePreference: ThemePreference = 'light') {
+  document.documentElement.dataset.theme = themePreference
+}
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<SessionUser | null>(null)
@@ -45,6 +49,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     void boot()
   }, [])
+
+  useEffect(() => {
+    applyThemePreference(user?.themePreference ?? 'light')
+  }, [user?.themePreference])
 
   const value = useMemo<AuthContextValue>(
     () => ({

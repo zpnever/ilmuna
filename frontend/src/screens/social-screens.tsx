@@ -277,7 +277,7 @@ export function PostDetailScreen() {
   return (
     <div className="space-y-6">
       <SectionHeading eyebrow="Postingan" title="Detail postingan" />
-      <PostCard post={postQuery.data} currentUserId={user.id} showComments />
+      <PostCard post={postQuery.data} currentUserId={user.id} showComments showDetailAction={false} />
     </div>
   )
 }

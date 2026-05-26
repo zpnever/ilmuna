@@ -135,6 +135,7 @@ profileRouter.patch('/me/profile', requireAuth, async (req: AuthenticatedRequest
       name: z.string().min(2).optional(),
       username: z.string().min(3).regex(/^[a-z0-9-_.]+$/).optional(),
       isPrivate: z.boolean().optional(),
+      themePreference: z.enum(['light', 'dark']).optional(),
       notificationPreferences: z
         .object({
           email: z.boolean(),

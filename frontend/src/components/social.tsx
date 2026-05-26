@@ -9,7 +9,6 @@ import {
   Heart,
   ImagePlus,
   MessageCircle,
-  Minus,
   Plus,
   Search,
   Send,
@@ -194,40 +193,26 @@ function ImageLightbox({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const [zoom, setZoom] = useState(1)
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          setZoom(1)
-        }
-        onOpenChange(nextOpen)
-      }}
-    >
-      <DialogContent className="w-[min(96vw,1080px)] bg-black/95 p-4">
-        <div className="flex items-center justify-between gap-3 pb-3 text-white">
-          <DialogTitle className="text-base font-semibold">Pratinjau gambar</DialogTitle>
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setZoom((current) => Math.max(1, current - 0.25))}>
-              <Minus className="h-4 w-4" />
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setZoom((current) => Math.min(3, current + 0.25))}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <div className="max-h-[80vh] overflow-auto rounded-[1.5rem] bg-black/80 p-4">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        hideCloseButton
+        overlayClassName="bg-black/92 backdrop-blur-none"
+        className="inset-0 left-0 top-0 h-screen w-screen translate-x-0 translate-y-0 rounded-none border-none bg-transparent p-0 shadow-none"
+      >
+        <button
+          type="button"
+          className="flex h-full w-full items-center justify-center p-0"
+          onClick={() => onOpenChange(false)}
+        >
           {image ? (
             <img
               src={image}
               alt="Preview"
-              className="mx-auto max-h-[72vh] w-auto max-w-full rounded-[1.5rem] object-contain transition-transform"
-              style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+              className="h-screen w-screen object-contain"
             />
           ) : null}
-        </div>
+        </button>
       </DialogContent>
     </Dialog>
   )
@@ -747,7 +732,17 @@ export function PostComposerDialog({
   )
 }
 
-export function PostCard({ post, currentUserId, showComments = false }: { post: FeedPost; currentUserId: string; showComments?: boolean }) {
+export function PostCard({
+  post,
+  currentUserId,
+  showComments = false,
+  showDetailAction = true,
+}: {
+  post: FeedPost
+  currentUserId: string
+  showComments?: boolean
+  showDetailAction?: boolean
+}) {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(!isLongPost(post))
   const [commentsOpen, setCommentsOpen] = useState(showComments)
@@ -904,11 +899,13 @@ export function PostCard({ post, currentUserId, showComments = false }: { post: 
           <Share2 className="mr-2 h-4 w-4" />
           {post.shareCount}
         </Button>
-        <Button asChild size="sm" variant="ghost">
-          <Link to="/posts/$postId" params={{ postId: post.id }}>
-            Detail
-          </Link>
-        </Button>
+        {showDetailAction ? (
+          <Button asChild size="sm" variant="ghost">
+            <Link to="/posts/$postId" params={{ postId: post.id }}>
+              Detail
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       {commentsOpen ? <CommentSection postId={post.id} currentUserId={currentUserId} /> : null}

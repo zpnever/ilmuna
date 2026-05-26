@@ -23,11 +23,49 @@
 }
 
 :root {
+  --surface-base: #ffffff;
+  --surface-card: rgba(255, 255, 255, 0.9);
+  --surface-elevated: #ffffff;
+  --surface-muted: rgba(17, 17, 17, 0.05);
+  --border-subtle: rgba(17, 17, 17, 0.1);
+  --border-soft: rgba(17, 17, 17, 0.08);
+  --foreground: #111111;
+  --button-primary-bg: #111111;
+  --button-primary-hover-bg: #000000;
+  --button-primary-text: #ffffff;
   color: #111111;
   background:
     radial-gradient(circle at top left, rgba(201, 168, 76, 0.15), transparent 30%),
     linear-gradient(180deg, #ffffff, #f8f6f0 40%, #ffffff 100%);
   font-family: var(--font-sans);
+}
+
+html[data-theme='dark'] {
+  --color-ink-50: #161616;
+  --color-ink-100: #1d1d1d;
+  --color-ink-200: #262626;
+  --color-ink-300: #434343;
+  --color-ink-400: #8d8d8d;
+  --color-ink-500: #c2c2c2;
+  --color-ink-600: #dfdfdf;
+  --color-ink-700: #ededed;
+  --color-ink-800: #f6f6f6;
+  --color-ink-900: #f9f9f9;
+  --surface-base: #0d0d0d;
+  --surface-card: rgba(20, 20, 20, 0.88);
+  --surface-elevated: #171717;
+  --surface-muted: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.14);
+  --border-soft: rgba(255, 255, 255, 0.1);
+  --foreground: #f7f7f7;
+  --button-primary-bg: #f5f5f5;
+  --button-primary-hover-bg: #e8e8e8;
+  --button-primary-text: #111111;
+  color: #f7f7f7;
+  background:
+    radial-gradient(circle at top left, rgba(201, 168, 76, 0.18), transparent 24%),
+    linear-gradient(180deg, #101010, #080808 45%, #111111 100%);
+  color-scheme: dark;
 }
 
 html {
@@ -37,11 +75,33 @@ html {
 body {
   min-width: 320px;
   min-height: 100vh;
-  color: var(--color-ink-900);
+  color: var(--foreground);
+  background: inherit;
 }
 
 #root {
   min-height: 100vh;
+}
+
+html[data-theme='dark'] .bg-white,
+html[data-theme='dark'] .bg-white\/90,
+html[data-theme='dark'] .bg-white\/95 {
+  background-color: var(--surface-card) !important;
+}
+
+html[data-theme='dark'] .border-black\/8,
+html[data-theme='dark'] .border-black\/10 {
+  border-color: var(--border-soft) !important;
+}
+
+html[data-theme='dark'] .bg-black\/3,
+html[data-theme='dark'] .bg-black\/5 {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+html[data-theme='dark'] .ring-black\/8,
+html[data-theme='dark'] .ring-black\/10 {
+  --tw-ring-color: rgba(255, 255, 255, 0.14) !important;
 }
 
 button,

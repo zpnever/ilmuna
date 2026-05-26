@@ -74,6 +74,7 @@ model User {
   coverUrl           String                @default("")
   interests          Json                  @default("[]")
   isPrivate          Boolean               @default(false)
+  themePreference    String                @default("light")
   notificationPreferences Json             @default("{\"email\":true,\"push\":true,\"group\":true}")
   emailVerified      Boolean               @default(true)
   isVerified         Boolean               @default(false)
